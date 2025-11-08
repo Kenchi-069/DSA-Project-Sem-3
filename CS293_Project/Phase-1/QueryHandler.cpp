@@ -40,16 +40,9 @@ json QueryHandler::processQueries(const json &queries_json)
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
             result["processing_time"] = duration.count();
         }
-        catch (const std::exception &e)
-        {
-            result["error"] = std::string("Exception: ") + e.what();
-            if (query.contains("id"))
-                result["id"] = query["id"];
-            result["processing_time"] = 0;
-        }
         catch (...)
         {
-            result["error"] = "Unknown exception";
+            result["error"] = "Error";
             if (query.contains("id"))
                 result["id"] = query["id"];
             result["processing_time"] = 0;

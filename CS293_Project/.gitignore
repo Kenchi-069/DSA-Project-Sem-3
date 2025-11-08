@@ -27,3 +27,6 @@ test_queries*.json
 # Build
 build/
 dist/
+
+# Test Cases
+Test Case/

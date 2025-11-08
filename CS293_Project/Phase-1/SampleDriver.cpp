@@ -9,8 +9,7 @@ int main(int argc, char *argv[])
 {
     if (argc != 4)
     {
-        std::cerr << "Usage: " << argv[0] << " <graph.json> <queries.json> <output.json>" << std::endl;
-        return 1;
+        std::cout << "Usage: " << argv[0] << " <graph.json> <queries.json> <output.json>" << std::endl;
     }
 
     std::string graph_file = argv[1];
@@ -19,38 +18,25 @@ int main(int argc, char *argv[])
 
     try
     {
-        std::cout << "=== Phase 1 ===" << std::endl;
-        std::cout << "Loading graph..." << std::endl;
-        auto t1 = std::chrono::high_resolution_clock::now();
+        std::cout << "Phase 1" << std::endl;
+        std::cout << "Loading Graph" << std::endl;
         Graph graph = JsonParser::parseGraph(graph_file);
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::cout << "Graph loaded: " << graph.getNodes().size() << " nodes, "
-                  << graph.getEdges().size() << " edges ("
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " ms)" << std::endl;
+        std::cout << "Graph Loaded: " << graph.getNodes().size() << " nodes, "
+                  << graph.getEdges().size() << " edges" << std::endl;
 
-        std::cout << "Preprocessing..." << std::endl;
-        auto t3 = std::chrono::high_resolution_clock::now();
-        // No preprocessing for Phase 1
-        auto t4 = std::chrono::high_resolution_clock::now();
-        std::cout << "Preprocessing done ("
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count() << " ms)" << std::endl;
-
-        std::cout << "Loading queries..." << std::endl;
+        std::cout << "Loading Queries" << std::endl;
         json queries = JsonParser::parseQueries(queries_file);
 
-        std::cout << "Processing queries..." << std::endl;
+        std::cout << "Processing Queries..." << std::endl;
         QueryHandler handler(graph);
         json output = handler.processQueries(queries);
 
-        std::cout << "Writing output..." << std::endl;
+        std::cout << "Writing Output" << std::endl;
         JsonParser::writeOutput(output_file, output);
-        std::cout << "Done!" << std::endl;
-
-        return 0;
+        std::cout << "Finished" << std::endl;
     }
     catch (const std::exception &e)
     {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        std::cout << "Error: " << e.what() << std::endl;
     }
 }
