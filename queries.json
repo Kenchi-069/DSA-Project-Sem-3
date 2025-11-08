@@ -1,0 +1,54 @@
+{
+  "meta": { "id": "qset_demo" },
+  "events": [
+
+    {
+      "type": "remove_edge",
+      "edge_id": 1001
+    },
+
+    {
+      "type": "modify_edge",
+      "edge_id": 1002,
+      "patch": { "length": 200.0 }
+    },
+
+    {
+      "type": "shortest_path",
+      "id": 1,
+      "source": 0,
+      "target": 5,
+      "mode": "distance",
+      "constraints": {
+        "forbidden_nodes": [3],
+        "forbidden_road_types": ["primary"]
+      }
+    },
+
+    {
+      "type": "shortest_path",
+      "id": 2,
+      "source": 2,
+      "target": 7,
+      "mode": "time"
+    },
+
+    {
+      "type": "knn",
+      "id": 3,
+      "pois": "Restaurant",
+      "query_point": { "lat": 19.072, "lon": 72.869 },
+      "k": 3,
+      "metric": "euclidean"
+    },
+
+    {
+      "type": "knn",
+      "id": 4,
+      "pois": "Hospital",
+      "query_point": { "lat": 19.075, "lon": 72.875 },
+      "k": 2,
+      "metric": "shortest_path"
+    }
+  ]
+}

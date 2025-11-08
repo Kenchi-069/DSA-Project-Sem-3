@@ -1,5 +1,17 @@
 #include <bits/stdc++.h>
+#include "json.hpp"
+#include <fstream>
+using json = nlohmann::json;
+
 using namespace std;
+struct pair_hash
+{
+    size_t operator()(const pair<int, int> &p) const noexcept
+    {
+        // Simple + effective hash combination
+        return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
+    }
+};
 
 class Node
 {
@@ -43,11 +55,13 @@ class Graph
 {
 private:
     unordered_map<int, Node *> nodeLookup;
-    unordered_map<pair<Node *, Node *>, int> edges;
+    unordered_map<pair<int, int>, int, pair_hash> edges;
 
 public:
+    Graph();
     Node *getNode(int val);
-    void loadGraphFromFile(const string &filename);
+    void loadGraph(const string &filename);
+    void loadQueries(const string &filename);
     void addEdge(int src, int dest);
     void removeEdge(int src, int dest);
     void printGraph();

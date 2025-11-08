@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "id": "sample_graph_1",
+    "nodes": 6,
+    "description": "Example small road network"
+  },
+
+  "nodes": [
+    {
+      "id": 0,
+      "lat": 19.0700,
+      "lon": 72.8700,
+      "pois": ["Restaurant", "Hospital"]
+    },
+    {
+      "id": 1,
+      "lat": 19.0712,
+      "lon": 72.8688
+    },
+    {
+      "id": 2,
+      "lat": 19.0730,
+      "lon": 72.8695,
+      "pois": ["Mall"]
+    },
+    {
+      "id": 3,
+      "lat": 19.0741,
+      "lon": 72.8720
+    },
+    {
+      "id": 4,
+      "lat": 19.0698,
+      "lon": 72.8733,
+      "pois": ["School"]
+    },
+    {
+      "id": 5,
+      "lat": 19.0725,
+      "lon": 72.8742
+    }
+  ],
+
+  "edges": [
+    {
+      "id": 1000,
+      "u": 0,
+      "v": 1,
+      "length": 120.0,
+      "average_time": 6.0,
+      "speed_profile": [40, 41, 38, 42, 39, 45, 40, 42, 41, 43, 40, 41],
+      "oneway": false,
+      "road_type": "primary"
+    },
+    {
+      "id": 1001,
+      "u": 1,
+      "v": 2,
+      "length": 200.0,
+      "average_time": 10.0,
+      "speed_profile": [35, 36, 37, 38, 39, 40, 41, 42, 41, 40, 39, 38],
+      "oneway": false,
+      "road_type": "secondary"
+    },
+    {
+      "id": 1002,
+      "u": 0,
+      "v": 3,
+      "length": 250.0,
+      "average_time": 15.0,
+      "oneway": true,
+      "road_type": "expressway"
+    },
+    {
+      "id": 1003,
+      "u": 2,
+      "v": 3,
+      "length": 150.0,
+      "average_time": 8.0,
+      "oneway": false,
+      "road_type": "primary"
+    },
+    {
+      "id": 1004,
+      "u": 3,
+      "v": 4,
+      "length": 180.0,
+      "average_time": 9.0,
+      "oneway": false,
+      "road_type": "secondary"
+    },
+    {
+      "id": 1005,
+      "u": 4,
+      "v": 5,
+      "length": 130.0,
+      "average_time": 7.0,
+      "oneway": false,
+      "road_type": "primary"
+    },
+    {
+      "id": 1006,
+      "u": 1,
+      "v": 5,
+      "length": 220.0,
+      "average_time": 12.0,
+      "oneway": false,
+      "road_type": "secondary"
+    }
+  ]
+}

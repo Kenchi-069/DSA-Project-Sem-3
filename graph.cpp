@@ -55,6 +55,7 @@ vector<double> Edge::getSpeed()
 {
     return speed;
 }
+Graph::Graph() {}
 Node *Graph::getNode(int val)
 {
     if (nodeLookup.find(val) != nodeLookup.end())
@@ -63,34 +64,63 @@ Node *Graph::getNode(int val)
     }
     return nullptr;
 }
+void Graph::loadGraph(const string &filename)
+{
+    ifstream inFile(filename);
+    if (!inFile)
+    {
+        cerr << "Unable to open file " << filename << endl;
+        return;
+    }
+    json j;
+    inFile >> j;
+
+    for (const auto &nodeData : j["nodes"])
+    {
+        int id = nodeData["id"];
+        pair<double, double> coordinates = {nodeData["coordinates"][0], nodeData["coordinates"][1]};
+        Node *node = new Node(id, coordinates);
+        for (const auto &poi : nodeData["pois"])
+        {
+            node->addPOI(poi);
+        }
+        nodeLookup[id] = node;
+    }
+
+    for (const auto &edgeData : j["edges"])
+    {
+        int srcId = edgeData["src"];
+        int destId = edgeData["dest"];
+        addEdge(srcId, destId);
+    }
+}
+void Graph::loadQueries(const string &filename)
+{
+    ifstream inFile(filename);
+    if (!inFile)
+    {
+        cerr << "Unable to open file " << filename << endl;
+        return;
+    }
+    json j;
+    inFile >> j;
+
+    for (const auto &query : j["events"])
+    {
+    }
+}
 void Graph::addEdge(int src, int dest)
 {
-    Node *srcNode = getNode(src);
-    Node *destNode = getNode(dest);
-    if (srcNode && destNode)
-    {
-        edges[{srcNode, destNode}] = 1; // Example weight
-    }
+    edges[{src, dest}] = 1; // weight can be modified as needed
 }
 void Graph::removeEdge(int src, int dest)
 {
-    Node *srcNode = getNode(src);
-    Node *destNode = getNode(dest);
-    if (srcNode && destNode)
-    {
-        edges.erase({srcNode, destNode});
-    }
+    edges.erase({src, dest});
 }
 void Graph::printGraph()
 {
     for (const auto &pair : edges)
     {
-        Node *src = pair.first.first;
-        Node *dest = pair.first.second;
-        cout << "Edge from Node " << src->getId() << " to Node " << dest->getId() << " with weight " << pair.second << endl;
+        cout << "Edge from " << pair.first.first << " to " << pair.first.second << " with weight " << pair.second << endl;
     }
-}
-void Graph::loadGraphFromFile(const string &filename)
-{
-    return;
 }
