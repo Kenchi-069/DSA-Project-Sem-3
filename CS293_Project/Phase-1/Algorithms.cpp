@@ -1,4 +1,5 @@
 #include "Algorithms.hpp"
+#include "Graph.hpp"
 #include <queue>
 #include <algorithm>
 
@@ -20,27 +21,26 @@ PathResult Algorithms::dijkstra(const Graph &graph, int source, int target, bool
     if (constraints.is_node_forbidden(source) || constraints.is_node_forbidden(target))
         return result;
 
-    std::unordered_map<int, double> dist;
+    std::unordered_map<int, double> distance_ya_time;
     std::unordered_map<int, int> parent;
     std::unordered_map<int, int> time_slot;
 
-    using PQElement = std::pair<double, int>;
-    std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
+    std::priority_queue<std::pair<double, int>, std::vector< std::pair<double, int>>, std::greater< std::pair<double, int>>> pq;
 
-    dist[source] = 0;
+    distance_ya_time[source] = 0;
     time_slot[source] = 0;
     pq.push({0, source});
 
     while (!pq.empty())
     {
-        auto [d, u] = pq.top();
+        auto [d, u] = pq.top(); // d = distance, u = node
         pq.pop();
-        if (dist.count(u) && d > dist[u])
+        if (distance_ya_time.count(u) && d > distance_ya_time[u])
             continue;
         if (u == target)
         {
             result.possible = true;
-            result.cost = dist[u];
+            result.cost = distance_ya_time[u];
             std::vector<int> path;
             int curr = target;
             while (parent.count(curr))
@@ -83,10 +83,10 @@ PathResult Algorithms::dijkstra(const Graph &graph, int source, int target, bool
                 edge_cost = e->length;
             }
 
-            double new_dist = dist[u] + edge_cost;
-            if (!dist.count(v) || new_dist < dist[v])
+            double new_dist = distance_ya_time[u] + edge_cost;
+            if (!distance_ya_time.count(v) || new_dist < distance_ya_time[v])
             {
-                dist[v] = new_dist;
+                distance_ya_time[v] = new_dist;
                 parent[v] = u;
                 time_slot[v] = next_time_slot;
                 pq.push({new_dist, v});
@@ -102,8 +102,7 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
     if (!graph.hasNode(source))
         return dist;
 
-    using PQElement = std::pair<double, int>;
-    std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
+    std::priority_queue< std::pair<double, int>, std::vector< std::pair<double, int>>, std::greater< std::pair<double, int>>> pq;
     dist[source] = 0;
     pq.push({0, source});
 
@@ -143,8 +142,7 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
 std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k)
 {
     std::vector<int> poi_nodes = graph.getNodesPOI(poi);
-    using DistNode = std::pair<double, int>;
-    std::vector<DistNode> distances;
+    std::vector< std::pair<double, int>> distances;
 
     for (int node_id : poi_nodes)
     {
@@ -173,8 +171,7 @@ std::vector<int> Algorithms::knn_shortest_path(const Graph &graph, double query_
     std::vector<int> poi_nodes = graph.getNodesPOI(poi);
     auto distances = dijkstra_all_distances(graph, query_node, false);
 
-    using DistNode = std::pair<double, int>;
-    std::vector<DistNode> sorted_distances;
+    std::vector< std::pair<double, int>> sorted_distances;
     for (int node_id : poi_nodes)
     {
         if (distances.count(node_id) && distances[node_id] < INF)
