@@ -20,13 +20,6 @@ void Graph::addNode(const Node &node)
 
 void Graph::addEdge(const Edge &edge)
 {
-    // Validate nodes exist
-    if (!hasNode(edge.u) || !hasNode(edge.v))
-    {
-        std::cerr << "Warning: Edge " << edge.id << " references non-existent nodes. Skipping." << std::endl;
-        return;
-    }
-
     Edge e = edge;
     e.original_length = edge.length;
     e.original_average_time = edge.average_time;
@@ -41,22 +34,10 @@ void Graph::addEdge(const Edge &edge)
     }
 }
 
-Node *Graph::get_node(int node_id)
-{
-    auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
-}
-
 const Node *Graph::getNode(int node_id) const
 {
     auto it = nodes.find(node_id);
     return (it != nodes.end()) ? &(it->second) : nullptr;
-}
-
-Edge *Graph::get_edge(int edge_id)
-{
-    auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
 }
 
 const Edge *Graph::getEdge(int edge_id) const
@@ -136,7 +117,7 @@ bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 
 const std::vector<int> &Graph::getAdjEdges(int node_id) const
 {
-    static const std::vector<int> empty;
+    static const std::vector<int> empty; // Return type is reference need to declare empty
     auto it = adjacency_list.find(node_id);
     return (it != adjacency_list.end()) ? it->second : empty;
 }
@@ -153,16 +134,37 @@ double Graph::nodeDistance(int node1, int node2) const
     const Node *n2 = getNode(node2);
     if (!n1 || !n2)
         return INF;
-    return euclidean_distance(n1->lat, n1->lon, n2->lat, n2->lon);
+    return EuDistance(n1->lat, n1->lon, n2->lat, n2->lon);
 }
 
-double Graph::euclidean_distance(double lat1, double lon1, double lat2, double lon2) const
+double Graph::EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact) const
 {
-    double dlat = lat2 - lat1;
-    double dlon = lon2 - lon1;
-    double dx = dlon * 111000 * cos((lat1 + lat2) / 2 * M_PI / 180);
-    double dy = dlat * 111000;
-    return sqrt(dx * dx + dy * dy);
+    if (!exact)
+    {
+        double dlat = lat2 - lat1;
+        double dlon = lon2 - lon1;
+
+        double dx = dlon * 111000.0 * std::cos((lat1 + lat2) / 2.0 * M_PI / 180.0);
+        double dy = dlat * 111000.0;
+
+        return std::sqrt(dx * dx + dy * dy);
+    }
+    else
+    {
+        const double R = 6371e3;
+
+        double phi1 = lat1 * M_PI / 180.0;
+        double phi2 = lat2 * M_PI / 180.0;
+        double dphi = (lat2 - lat1) * M_PI / 180.0;
+        double dlambda = (lon2 - lon1) * M_PI / 180.0;
+
+        double a = std::sin(dphi / 2.0) * std::sin(dphi / 2.0) +
+                   std::cos(phi1) * std::cos(phi2) *
+                       std::sin(dlambda / 2.0) * std::sin(dlambda / 2.0);
+        double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
+
+        return R * c;
+    }
 }
 
 double Graph::edgeTimeinSlot(int edge_id, int time_slot) const
@@ -186,7 +188,7 @@ int Graph::findNearestNode(double lat, double lon) const
     double min_dist = INF;
     for (const auto &[id, node] : nodes)
     {
-        double dist = euclidean_distance(lat, lon, node.lat, node.lon);
+        double dist = EuDistance(lat, lon, node.lat, node.lon);
         if (dist < min_dist)
         {
             min_dist = dist;

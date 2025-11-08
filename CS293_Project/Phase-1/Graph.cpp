@@ -137,7 +137,7 @@ double Graph::nodeDistance(int node1, int node2) const
     return EuDistance(n1->lat, n1->lon, n2->lat, n2->lon);
 }
 
-double Graph::EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact = false) const
+double Graph::EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact) const
 {
     if (!exact)
     {

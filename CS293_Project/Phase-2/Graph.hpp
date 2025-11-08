@@ -27,21 +27,23 @@ struct Edge
     int id;
     int u;
     int v;
-    double length;
-    double average_time;
-    std::vector<double> speed_profile;
-    bool oneway;
-    std::string road_type;
-    bool is_deleted;
 
+    double length;
     double original_length;
+
+    double average_time;
     double original_average_time;
+
+    std::vector<double> speed_profile;
     std::vector<double> original_speed_profile;
+
+    std::string road_type;
     std::string original_road_type;
 
-    Edge() : id(-1), u(-1), v(-1), length(0), average_time(0),
-             oneway(false), is_deleted(false),
-             original_length(0), original_average_time(0) {}
+    bool oneway;
+    bool is_deleted;
+
+    Edge() : id(-1), u(-1), v(-1), length(0), average_time(0), oneway(false), is_deleted(false), original_length(0), original_average_time(0) {}
 };
 
 class Graph
@@ -58,9 +60,7 @@ public:
     void addNode(const Node &node);
     void addEdge(const Edge &edge);
 
-    Node *get_node(int node_id);
     const Node *getNode(int node_id) const;
-    Edge *get_edge(int edge_id);
     const Edge *getEdge(int edge_id) const;
 
     bool hasNode(int node_id) const;
@@ -72,12 +72,13 @@ public:
     std::vector<int> getNodesPOI(const std::string &poi) const;
 
     double nodeDistance(int node1, int node2) const;
-    double euclidean_distance(double lat1, double lon1, double lat2, double lon2) const;
+    double EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact = false) const;
     double edgeTimeinSlot(int edge_id, int time_slot) const;
 
     const std::unordered_map<int, Node> &getNodes() const { return nodes; }
     const std::unordered_map<int, Edge> &getEdges() const { return edges; }
     int getNodeCount() const { return nodes.size(); }
+
     int findNearestNode(double lat, double lon) const;
 };
 
