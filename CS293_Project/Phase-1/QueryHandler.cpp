@@ -16,44 +16,44 @@ json QueryHandler::processQueries(const json &queries_json)
     for (const auto &query : queries_json["events"])
     {
         json result;
-        // try
-        // {
-        std::string type = query.value("type", "");
-        auto start = std::chrono::high_resolution_clock::now();
-
-        if (type == "remove_edge")
-            result = handleRemoveEdges(query);
-        else if (type == "modify_edge")
-            result = handleModifyEdge(query);
-        else if (type == "shortest_path")
-            result = handleShortestPath(query);
-        else if (type == "knn")
-            result = handleKNN(query);
-        else
+        try
         {
-            result["error"] = "Unknown query type: " + type;
+            std::string type = query.value("type", "");
+            auto start = std::chrono::high_resolution_clock::now();
+
+            if (type == "remove_edge")
+                result = handleRemoveEdges(query);
+            else if (type == "modify_edge")
+                result = handleModifyEdge(query);
+            else if (type == "shortest_path")
+                result = handleShortestPath(query);
+            else if (type == "knn")
+                result = handleKNN(query);
+            else
+            {
+                result["error"] = "Unknown query type: " + type;
+                if (query.contains("id"))
+                    result["id"] = query["id"];
+            }
+
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+            result["processing_time"] = duration.count();
+        }
+        catch (const std::exception &e)
+        {
+            result["error"] = std::string("Exception: ") + e.what();
             if (query.contains("id"))
                 result["id"] = query["id"];
+            result["processing_time"] = 0;
         }
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        result["processing_time"] = duration.count();
-        // }
-        // catch (const std::exception &e)
-        // {
-        //     result["error"] = std::string("Exception: ") + e.what();
-        //     if (query.contains("id"))
-        //         result["id"] = query["id"];
-        //     result["processing_time"] = 0;
-        // }
-        // catch (...)
-        // {
-        //     result["error"] = "Unknown exception";
-        //     if (query.contains("id"))
-        //         result["id"] = query["id"];
-        //     result["processing_time"] = 0;
-        // }
+        catch (...)
+        {
+            result["error"] = "Unknown exception";
+            if (query.contains("id"))
+                result["id"] = query["id"];
+            result["processing_time"] = 0;
+        }
         output["results"].push_back(result);
     }
     return output;
