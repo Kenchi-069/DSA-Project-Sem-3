@@ -4,10 +4,6 @@
 Graph JsonParser::parseGraph(const std::string &filename)
 {
     std::ifstream file(filename);
-    if (!file.is_open())
-    {
-        throw std::runtime_error("Cannot open graph file: " + filename);
-    }
     json j;
     file >> j;
     Graph graph;
@@ -71,10 +67,6 @@ Edge JsonParser::parseEdge(const json &edge_json)
 json JsonParser::parseQueries(const std::string &filename)
 {
     std::ifstream file(filename);
-    if (!file.is_open())
-    {
-        throw std::runtime_error("Cannot open queries file: " + filename);
-    }
     json j;
     file >> j;
     return j;
@@ -83,10 +75,6 @@ json JsonParser::parseQueries(const std::string &filename)
 void JsonParser::writeOutput(const std::string &filename, const json &output)
 {
     std::ofstream file(filename);
-    if (!file.is_open())
-    {
-        throw std::runtime_error("Cannot open output file: " + filename);
-    }
     file << output.dump(2);
     file.close();
 }

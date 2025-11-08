@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
 
         std::cout << "Processing Phase-2 queries..." << std::endl;
         QueryHandlerPhase2 handler(graph);
-        json output = handler.process_queries(queries);
+        json output = handler.processQueries(queries);
 
         std::cout << "Writing output..." << std::endl;
         JsonParser::writeOutput(output_file, output);
