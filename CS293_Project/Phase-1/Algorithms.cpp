@@ -2,6 +2,63 @@
 #include "Graph.hpp"
 #include <queue>
 #include <algorithm>
+#include <cmath>
+
+std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double start_time)
+{
+    // start_time: absolute seconds since t=0
+    double remaining_distance = e.length;
+    double total_time = 0.0;
+
+    double time_into_slot = std::fmod(start_time, 900.0);
+    if (time_into_slot < 0.0)
+        time_into_slot += 900.0;
+
+    double time_left_in_first_slot = (time_into_slot == 0.0) ? 900.0 : (900.0 - time_into_slot);
+    bool first_segment = true;
+    double absolute_segment_start_time = start_time;
+
+    while (remaining_distance > 1e-9)
+    {
+        int slot_idx = static_cast<int>(std::floor(absolute_segment_start_time / 900.0)) % 96;
+        if (slot_idx < 0)
+            slot_idx += 96;
+
+        double speed = 0.0;
+        if (!e.speed_profile.empty())
+            speed = e.speed_profile[slot_idx];
+
+        // fallback to average time
+        if (speed <= 0.0)
+        {
+            speed = e.length / e.average_time;
+        }
+
+        double time_available = first_segment ? time_left_in_first_slot : 900.0;
+        double distance_can_cover = speed * time_available;
+
+        if (distance_can_cover >= remaining_distance)
+        {
+            double t_needed = remaining_distance / speed;
+            total_time += t_needed;
+            remaining_distance = 0.0;
+        }
+        else
+        {
+            total_time += time_available;
+            remaining_distance -= distance_can_cover;
+            absolute_segment_start_time = start_time + total_time;
+            first_segment = false;
+        }
+    }
+
+    double arrival_time = start_time + total_time;
+    int arrival_slot = static_cast<int>(std::floor(arrival_time / 900.0)) % 96;
+    if (arrival_slot < 0)
+        arrival_slot += 96;
+
+    return {total_time, arrival_slot};
+}
 
 PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, int target, const Constraints &constraints)
 {
@@ -14,14 +71,15 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
     using P = std::pair<double, int>;
     std::priority_queue<P, std::vector<P>, std::greater<P>> pq;
 
-    dist[source] = 0;
-    pq.push({0, source});
+    dist[source] = 0.0;
+    pq.push({0.0, source});
 
     while (!pq.empty())
     {
         auto [d, u] = pq.top();
         pq.pop();
-        if (d > dist[u])
+
+        if (dist.count(u) && d > dist[u])
             continue;
 
         if (u == target)
@@ -49,7 +107,7 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
             if (constraints.is_node_forbidden(v))
                 continue;
 
-            double new_dist = dist[u] + e->length;
+            double new_dist = d + e->length;
             if (!dist.count(v) || new_dist < dist[v])
             {
                 dist[v] = new_dist;
@@ -58,6 +116,7 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
             }
         }
     }
+
     return result;
 }
 
@@ -71,25 +130,24 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
     {
         double time;
         int node;
-        int slot;
-        bool operator>(const State &other) const { return time > other.time; }
+        bool operator>(const State &o) const { return time > o.time; }
     };
 
     std::unordered_map<int, double> best_time;
     std::unordered_map<int, int> parent;
-    std::unordered_map<int, int> slot_at_node;
-
     std::priority_queue<State, std::vector<State>, std::greater<State>> pq;
-    pq.push({0.0, source, 0});
+
     best_time[source] = 0.0;
-    slot_at_node[source] = 0;
+    pq.push({0.0, source});
 
     while (!pq.empty())
     {
-        auto [curr_time, u, curr_slot] = pq.top();
+        auto st = pq.top();
         pq.pop();
+        double curr_time = st.time;
+        int u = st.node;
 
-        if (curr_time > best_time[u])
+        if (best_time.count(u) && curr_time > best_time[u])
             continue;
 
         if (u == target)
@@ -117,41 +175,14 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
             if (constraints.is_node_forbidden(v))
                 continue;
 
-            double edge_time = 0.0;
-            double remaining_distance = e->length;
-            int slot = curr_slot;
+            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double arrival_time = curr_time + edge_time;
 
-            while (remaining_distance > 0.0)
+            if (!best_time.count(v) || arrival_time < best_time[v])
             {
-                double speed = e->speed_profile.empty() ? 0 : e->speed_profile[slot];
-                if (speed <= 0)
-                    speed = e->average_time > 0 ? e->length / e->average_time : 10.0;
-
-                double time_left_in_slot = 900.0;
-                double distance_covered = speed * time_left_in_slot;
-
-                if (distance_covered >= remaining_distance)
-                {
-                    edge_time += remaining_distance / speed;
-                    remaining_distance = 0;
-                }
-                else
-                {
-                    edge_time += time_left_in_slot;
-                    remaining_distance -= distance_covered;
-                    slot = (slot + 1) % 96;
-                }
-            }
-
-            double new_time = curr_time + edge_time;
-            int next_slot = (curr_slot + static_cast<int>(new_time / 900)) % 96;
-
-            if (!best_time.count(v) || new_time < best_time[v])
-            {
-                best_time[v] = new_time;
+                best_time[v] = arrival_time;
                 parent[v] = u;
-                slot_at_node[v] = next_slot;
-                pq.push({new_time, v, next_slot});
+                pq.push({arrival_time, v});
             }
         }
     }
@@ -165,9 +196,11 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
     if (!graph.hasNode(source))
         return dist;
 
-    std::priority_queue< std::pair<double, int>, std::vector< std::pair<double, int>>, std::greater< std::pair<double, int>>> pq;
-    dist[source] = 0;
-    pq.push({0, source});
+    using P = std::pair<double, int>;
+    std::priority_queue<P, std::vector<P>, std::greater<P>> pq;
+
+    dist[source] = 0.0;
+    pq.push({0.0, source});
 
     while (!pq.empty())
     {
@@ -191,7 +224,7 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
                 continue;
 
             double edge_cost = use_time ? e->average_time : e->length;
-            double new_dist = dist[u] + edge_cost;
+            double new_dist = d + edge_cost;
             if (!dist.count(v) || new_dist < dist[v])
             {
                 dist[v] = new_dist;
@@ -199,6 +232,7 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
             }
         }
     }
+
     return dist;
 }
 
