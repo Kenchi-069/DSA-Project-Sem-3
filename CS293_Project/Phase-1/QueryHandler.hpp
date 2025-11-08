@@ -7,18 +7,19 @@
 
 using json = nlohmann::json;
 
-class QueryHandler {
+class QueryHandler
+{
 public:
-    QueryHandler(Graph& graph) : graph(graph) {}
-    json process_queries(const json& queries_json);
-    
+    QueryHandler(Graph &graph) : graph(graph) {}
+    json processQueries(const json &queries_json);
+
 private:
-    Graph& graph;
-    json handle_remove_edge(const json& query);
-    json handle_modify_edge(const json& query);
-    json handle_shortest_path(const json& query);
-    json handle_knn(const json& query);
-    Constraints parse_constraints(const json& query);
+    Graph &graph;
+    json handleRemoveEdges(const json &query);
+    json handleModifyEdge(const json &query);
+    json handleShortestPath(const json &query);
+    json handleKNN(const json &query);
+    Constraints parseConstraints(const json &query);
 };
 
 #endif

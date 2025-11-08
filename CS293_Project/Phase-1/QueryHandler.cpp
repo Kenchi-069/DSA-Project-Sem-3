@@ -2,7 +2,7 @@
 #include <chrono>
 #include <iostream>
 
-json QueryHandler::process_queries(const json &queries_json)
+json QueryHandler::processQueries(const json &queries_json)
 {
     json output;
     output["results"] = json::array();
@@ -16,50 +16,50 @@ json QueryHandler::process_queries(const json &queries_json)
     for (const auto &query : queries_json["events"])
     {
         json result;
-        try
-        {
-            std::string type = query.value("type", "");
-            auto start = std::chrono::high_resolution_clock::now();
+        // try
+        // {
+        std::string type = query.value("type", "");
+        auto start = std::chrono::high_resolution_clock::now();
 
-            if (type == "remove_edge")
-                result = handle_remove_edge(query);
-            else if (type == "modify_edge")
-                result = handle_modify_edge(query);
-            else if (type == "shortest_path")
-                result = handle_shortest_path(query);
-            else if (type == "knn")
-                result = handle_knn(query);
-            else
-            {
-                result["error"] = "Unknown query type: " + type;
-                if (query.contains("id"))
-                    result["id"] = query["id"];
-            }
-
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-            result["processing_time"] = duration.count();
-        }
-        catch (const std::exception &e)
+        if (type == "remove_edge")
+            result = handleRemoveEdges(query);
+        else if (type == "modify_edge")
+            result = handleModifyEdge(query);
+        else if (type == "shortest_path")
+            result = handleShortestPath(query);
+        else if (type == "knn")
+            result = handleKNN(query);
+        else
         {
-            result["error"] = std::string("Exception: ") + e.what();
+            result["error"] = "Unknown query type: " + type;
             if (query.contains("id"))
                 result["id"] = query["id"];
-            result["processing_time"] = 0;
         }
-        catch (...)
-        {
-            result["error"] = "Unknown exception";
-            if (query.contains("id"))
-                result["id"] = query["id"];
-            result["processing_time"] = 0;
-        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        result["processing_time"] = duration.count();
+        // }
+        // catch (const std::exception &e)
+        // {
+        //     result["error"] = std::string("Exception: ") + e.what();
+        //     if (query.contains("id"))
+        //         result["id"] = query["id"];
+        //     result["processing_time"] = 0;
+        // }
+        // catch (...)
+        // {
+        //     result["error"] = "Unknown exception";
+        //     if (query.contains("id"))
+        //         result["id"] = query["id"];
+        //     result["processing_time"] = 0;
+        // }
         output["results"].push_back(result);
     }
     return output;
 }
 
-json QueryHandler::handle_remove_edge(const json &query)
+json QueryHandler::handleRemoveEdges(const json &query)
 {
     json result;
     if (query.contains("id"))
@@ -70,7 +70,7 @@ json QueryHandler::handle_remove_edge(const json &query)
     return result;
 }
 
-json QueryHandler::handle_modify_edge(const json &query)
+json QueryHandler::handleModifyEdge(const json &query)
 {
     json result;
     if (query.contains("id"))
@@ -103,7 +103,7 @@ json QueryHandler::handle_modify_edge(const json &query)
     return result;
 }
 
-Constraints QueryHandler::parse_constraints(const json &query)
+Constraints QueryHandler::parseConstraints(const json &query)
 {
     Constraints constraints;
     if (query.contains("constraints"))
@@ -127,14 +127,14 @@ Constraints QueryHandler::parse_constraints(const json &query)
     return constraints;
 }
 
-json QueryHandler::handle_shortest_path(const json &query)
+json QueryHandler::handleShortestPath(const json &query)
 {
     json result;
     result["id"] = query["id"];
     int source = query["source"];
     int target = query["target"];
     std::string mode = query.value("mode", "distance");
-    Constraints constraints = parse_constraints(query);
+    Constraints constraints = parseConstraints(query);
 
     PathResult path;
     if (mode == "time")
@@ -162,7 +162,7 @@ json QueryHandler::handle_shortest_path(const json &query)
     return result;
 }
 
-json QueryHandler::handle_knn(const json &query)
+json QueryHandler::handleKNN(const json &query)
 {
     json result;
     result["id"] = query["id"];

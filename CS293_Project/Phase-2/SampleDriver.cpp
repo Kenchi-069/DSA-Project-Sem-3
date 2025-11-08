@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
         std::cout << "=== Phase 2 ===" << std::endl;
         std::cout << "Loading graph..." << std::endl;
         auto t1 = std::chrono::high_resolution_clock::now();
-        Graph graph = JsonParser::parse_graph(graph_file);
+        Graph graph = JsonParser::parseGraph(graph_file);
         auto t2 = std::chrono::high_resolution_clock::now();
         std::cout << "Graph loaded: " << graph.getNodes().size() << " nodes, "
                   << graph.getEdges().size() << " edges ("
@@ -37,14 +37,14 @@ int main(int argc, char *argv[])
                   << std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t3).count() << " ms)" << std::endl;
 
         std::cout << "Loading queries..." << std::endl;
-        json queries = JsonParser::parse_queries(queries_file);
+        json queries = JsonParser::parseQueries(queries_file);
 
         std::cout << "Processing Phase-2 queries..." << std::endl;
         QueryHandlerPhase2 handler(graph);
         json output = handler.process_queries(queries);
 
         std::cout << "Writing output..." << std::endl;
-        JsonParser::write_output(output_file, output);
+        JsonParser::writeOutput(output_file, output);
         std::cout << "Done!" << std::endl;
 
         return 0;

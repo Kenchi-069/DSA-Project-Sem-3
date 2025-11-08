@@ -9,15 +9,16 @@
 
 using json = nlohmann::json;
 
-class JsonParser {
+class JsonParser
+{
 public:
-    static Graph parse_graph(const std::string& filename);
-    static json parse_queries(const std::string& filename);
-    static void write_output(const std::string& filename, const json& output);
-    
+    static Graph parseGraph(const std::string &filename);
+    static json parseQueries(const std::string &filename);
+    static void writeOutput(const std::string &filename, const json &output);
+
 private:
-    static Node parse_node(const json& node_json);
-    static Edge parse_edge(const json& edge_json);
+    static Node parseNode(const json &node_json);
+    static Edge parseEdge(const json &edge_json);
 };
 
 #endif

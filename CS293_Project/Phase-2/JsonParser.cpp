@@ -1,7 +1,7 @@
 #include "JsonParser.hpp"
 #include <iostream>
 
-Graph JsonParser::parse_graph(const std::string &filename)
+Graph JsonParser::parseGraph(const std::string &filename)
 {
     std::ifstream file(filename);
     if (!file.is_open())
@@ -16,7 +16,7 @@ Graph JsonParser::parse_graph(const std::string &filename)
     {
         for (const auto &node_json : j["nodes"])
         {
-            Node node = parse_node(node_json);
+            Node node = parseNode(node_json);
             graph.addNode(node);
         }
     }
@@ -24,14 +24,14 @@ Graph JsonParser::parse_graph(const std::string &filename)
     {
         for (const auto &edge_json : j["edges"])
         {
-            Edge edge = parse_edge(edge_json);
+            Edge edge = parseEdge(edge_json);
             graph.addEdge(edge);
         }
     }
     return graph;
 }
 
-Node JsonParser::parse_node(const json &node_json)
+Node JsonParser::parseNode(const json &node_json)
 {
     Node node;
     node.id = node_json["id"];
@@ -47,7 +47,7 @@ Node JsonParser::parse_node(const json &node_json)
     return node;
 }
 
-Edge JsonParser::parse_edge(const json &edge_json)
+Edge JsonParser::parseEdge(const json &edge_json)
 {
     Edge edge;
     edge.id = edge_json["id"];
@@ -68,7 +68,7 @@ Edge JsonParser::parse_edge(const json &edge_json)
     return edge;
 }
 
-json JsonParser::parse_queries(const std::string &filename)
+json JsonParser::parseQueries(const std::string &filename)
 {
     std::ifstream file(filename);
     if (!file.is_open())
@@ -80,7 +80,7 @@ json JsonParser::parse_queries(const std::string &filename)
     return j;
 }
 
-void JsonParser::write_output(const std::string &filename, const json &output)
+void JsonParser::writeOutput(const std::string &filename, const json &output)
 {
     std::ofstream file(filename);
     if (!file.is_open())
