@@ -15,7 +15,7 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
 PathResult Algorithms::dijkstra(const Graph &graph, int source, int target, bool use_time, const Constraints &constraints)
 {
     PathResult result;
-    if (!graph.has_node(source) || !graph.has_node(target))
+    if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
     if (constraints.is_node_forbidden(source) || constraints.is_node_forbidden(target))
         return result;
@@ -55,7 +55,7 @@ PathResult Algorithms::dijkstra(const Graph &graph, int source, int target, bool
         }
 
         int current_time_slot = time_slot.count(u) ? time_slot[u] : 0;
-        for (int edge_id : graph.get_adjacent_edges(u))
+        for (int edge_id : graph.getAdjEdges(u))
         {
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
@@ -73,7 +73,7 @@ PathResult Algorithms::dijkstra(const Graph &graph, int source, int target, bool
             int next_time_slot = current_time_slot;
             if (use_time)
             {
-                edge_cost = graph.get_edge_time(edge_id, current_time_slot);
+                edge_cost = graph.edgeTimeinSlot(edge_id, current_time_slot);
                 double time_minutes = edge_cost / 60.0;
                 int slots_passed = static_cast<int>(time_minutes / 15.0);
                 next_time_slot = (current_time_slot + slots_passed) % 96;
@@ -99,7 +99,7 @@ PathResult Algorithms::dijkstra(const Graph &graph, int source, int target, bool
 std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &graph, int source, bool use_time, const Constraints &constraints)
 {
     std::unordered_map<int, double> dist;
-    if (!graph.has_node(source))
+    if (!graph.hasNode(source))
         return dist;
 
     using PQElement = std::pair<double, int>;
@@ -114,7 +114,7 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
         if (dist.count(u) && d > dist[u])
             continue;
 
-        for (int edge_id : graph.get_adjacent_edges(u))
+        for (int edge_id : graph.getAdjEdges(u))
         {
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
@@ -142,7 +142,7 @@ std::unordered_map<int, double> Algorithms::dijkstra_all_distances(const Graph &
 
 std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k)
 {
-    std::vector<int> poi_nodes = graph.get_nodes_with_poi(poi);
+    std::vector<int> poi_nodes = graph.getNodesPOI(poi);
     using DistNode = std::pair<double, int>;
     std::vector<DistNode> distances;
 
@@ -151,7 +151,7 @@ std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat,
         const Node *n = graph.getNode(node_id);
         if (!n)
             continue;
-        double dist = graph.euclidean_distance(query_lat, query_lon, n->lat, n->lon);
+        double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
         distances.push_back({dist, node_id});
     }
     std::sort(distances.begin(), distances.end());
@@ -166,11 +166,11 @@ std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat,
 
 std::vector<int> Algorithms::knn_shortest_path(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k)
 {
-    int query_node = graph.find_nearest_node(query_lat, query_lon);
+    int query_node = graph.findNearestNode(query_lat, query_lon);
     if (query_node == -1)
         return std::vector<int>();
 
-    std::vector<int> poi_nodes = graph.get_nodes_with_poi(poi);
+    std::vector<int> poi_nodes = graph.getNodesPOI(poi);
     auto distances = dijkstra_all_distances(graph, query_node, false);
 
     using DistNode = std::pair<double, int>;

@@ -63,22 +63,23 @@ public:
     const Node *getNode(int node_id) const;
     const Edge *getEdge(int edge_id) const;
 
-    bool has_node(int node_id) const;
-    bool has_edge(int edge_id) const;
-    bool remove_edge(int edge_id);
-    bool modify_edge(int edge_id, const Edge &patch, bool has_patch_data);
+    bool hasNode(int node_id) const;
+    bool hasEdge(int edge_id) const;
+    bool removeEdge(int edge_id);
+    bool modifyEdge(int edge_id, const Edge &patch, bool has_patch_data);
 
-    const std::vector<int> &get_adjacent_edges(int node_id) const;
-    std::vector<int> get_nodes_with_poi(const std::string &poi) const;
+    const std::vector<int> &getAdjEdges(int node_id) const;
+    std::vector<int> getNodesPOI(const std::string &poi) const;
 
-    double euclidean_distance(int node1, int node2) const;
-    double euclidean_distance(double lat1, double lon1, double lat2, double lon2) const;
-    double get_edge_time(int edge_id, int time_slot) const;
+    double nodeDistance(int node1, int node2) const;
+    double EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact = false) const;
+    double edgeTimeinSlot(int edge_id, int time_slot) const;
 
-    const std::unordered_map<int, Node> &get_nodes() const { return nodes; }
-    const std::unordered_map<int, Edge> &get_edges() const { return edges; }
-    int get_node_count() const { return nodes.size(); }
-    int find_nearest_node(double lat, double lon) const;
+    const std::unordered_map<int, Node> &getNodes() const { return nodes; }
+    const std::unordered_map<int, Edge> &getEdges() const { return edges; }
+    int getNodeCount() const { return nodes.size(); }
+
+    int findNearestNode(double lat, double lon) const;
 };
 
 #endif

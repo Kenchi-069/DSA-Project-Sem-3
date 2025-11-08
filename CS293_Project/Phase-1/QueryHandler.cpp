@@ -65,7 +65,7 @@ json QueryHandler::handle_remove_edge(const json &query)
     if (query.contains("id"))
         result["id"] = query["id"];
     int edge_id = query["edge_id"];
-    bool success = graph.remove_edge(edge_id);
+    bool success = graph.removeEdge(edge_id);
     result["done"] = success;
     return result;
 }
@@ -98,7 +98,7 @@ json QueryHandler::handle_modify_edge(const json &query)
         }
     }
 
-    bool success = graph.modify_edge(edge_id, patch, has_patch_data);
+    bool success = graph.modifyEdge(edge_id, patch, has_patch_data);
     result["done"] = success;
     return result;
 }

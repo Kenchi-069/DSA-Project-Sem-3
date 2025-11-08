@@ -47,7 +47,7 @@ double AlgorithmsPhase2::calculate_edge_overlap_percent(const std::vector<int> &
 PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int target)
 {
     PathResult result;
-    if (!graph.has_node(source) || !graph.has_node(target))
+    if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
     std::unordered_map<int, double> dist;
@@ -82,7 +82,7 @@ PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int
             return result;
         }
 
-        for (int edge_id : graph.get_adjacent_edges(u))
+        for (int edge_id : graph.getAdjEdges(u))
         {
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
@@ -109,7 +109,7 @@ PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int
 PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges)
 {
     PathResult result;
-    if (!graph.has_node(source) || !graph.has_node(target))
+    if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
     std::unordered_map<int, double> dist;
@@ -144,7 +144,7 @@ PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target
             return result;
         }
 
-        for (int edge_id : graph.get_adjacent_edges(u))
+        for (int edge_id : graph.getAdjEdges(u))
         {
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
@@ -339,14 +339,14 @@ double AlgorithmsPhase2::euclidean_heuristic(const Graph &graph, int from, int t
     const Node *n2 = graph.getNode(to);
     if (!n1 || !n2)
         return 0;
-    return graph.euclidean_distance(from, to);
+    return graph.nodeDistance(from, to);
 }
 
 // A* for faster approximate shortest paths
 PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, double heuristic_weight)
 {
     PathResult result;
-    if (!graph.has_node(source) || !graph.has_node(target))
+    if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
     std::unordered_map<int, double> g_score; // Actual cost from source
@@ -385,7 +385,7 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
             return result;
         }
 
-        for (int edge_id : graph.get_adjacent_edges(u))
+        for (int edge_id : graph.getAdjEdges(u))
         {
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
