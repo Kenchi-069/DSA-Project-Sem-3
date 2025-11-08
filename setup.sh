@@ -2,11 +2,12 @@
 
 # CS293 Graph-Based Routing System - COMPLETE REWRITE v3.0
 # All critical fixes implemented + Complete Phase separation
+# REWRITTEN to use std::unique_ptr for heap-allocated nodes/edges
 
 set -e
 
 echo "=========================================="
-echo "CS293 Project Setup v3.0 (FULLY FIXED)"
+echo "CS293 Project Setup v3.0 (unique_ptr)"
 echo "=========================================="
 echo ""
 
@@ -22,7 +23,7 @@ elif command -v curl &> /dev/null; then
     curl -sL https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp -o json.hpp 2>/dev/null || echo "Download may have failed"
 fi
 
-echo "[2/20] Creating Phase-1/Graph.hpp..."
+echo "[2/20] Creating Phase-1/Graph.hpp (Using std::unique_ptr)..."
 cat > Phase-1/Graph.hpp << 'EOF'
 #ifndef GRAPH_HPP
 #define GRAPH_HPP
@@ -34,6 +35,7 @@ cat > Phase-1/Graph.hpp << 'EOF'
 #include <limits>
 #include <cmath>
 #include <stdexcept>
+#include <memory> // <-- ADDED for smart pointers
 
 const double INF = std::numeric_limits<double>::infinity();
 
@@ -70,13 +72,19 @@ struct Edge {
 
 class Graph {
 private:
-    std::unordered_map<int, Node> nodes;
-    std::unordered_map<int, Edge> edges;
+    // --- MODIFIED: Use unique_ptr to store objects on the heap ---
+    std::unordered_map<int, std::unique_ptr<Node>> nodes;
+    std::unordered_map<int, std::unique_ptr<Edge>> edges;
+    // ---
+    
     std::unordered_map<int, std::vector<int>> adjacency_list;
     std::unordered_map<std::string, std::vector<int>> poi_index;
     
 public:
     Graph() {}
+    
+    // No explicit destructor needed!
+    // std::unique_ptr automatically deletes memory.
     
     void add_node(const Node& node);
     void add_edge(const Edge& edge);
@@ -98,8 +106,11 @@ public:
     double euclidean_distance(double lat1, double lon1, double lat2, double lon2) const;
     double get_edge_time(int edge_id, int time_slot) const;
     
-    const std::unordered_map<int, Node>& get_nodes() const { return nodes; }
-    const std::unordered_map<int, Edge>& get_edges() const { return edges; }
+    // --- MODIFIED: Return types reflect unique_ptr map ---
+    const std::unordered_map<int, std::unique_ptr<Node>>& get_nodes() const { return nodes; }
+    const std::unordered_map<int, std::unique_ptr<Edge>>& get_edges() const { return edges; }
+    // ---
+    
     int get_node_count() const { return nodes.size(); }
     int find_nearest_node(double lat, double lon) const;
 };
@@ -107,14 +118,18 @@ public:
 #endif
 EOF
 
-echo "[3/20] Creating Phase-1/Graph.cpp..."
+echo "[3/20] Creating Phase-1/Graph.cpp (Using std::unique_ptr)..."
 cat > Phase-1/Graph.cpp << 'EOF'
 #include "Graph.hpp"
 #include <algorithm>
 #include <iostream>
+#include <memory> // <-- ADDED for std::make_unique
 
 void Graph::add_node(const Node& node) {
-    nodes[node.id] = node;
+    // --- MODIFIED: Create heap-allocated Node via make_unique ---
+    nodes[node.id] = std::make_unique<Node>(node);
+    // ---
+    
     adjacency_list[node.id] = std::vector<int>();
     
     for (const auto& poi : node.pois) {
@@ -131,37 +146,48 @@ void Graph::add_edge(const Edge& edge) {
         return;
     }
     
-    Edge e = edge;
-    e.original_length = edge.length;
-    e.original_average_time = edge.average_time;
-    e.original_speed_profile = edge.speed_profile;
-    e.original_road_type = edge.road_type;
+    // --- MODIFIED: Create a copy, then move a unique_ptr to the map ---
+    Edge e_copy = edge;
+    e_copy.original_length = edge.length;
+    e_copy.original_average_time = edge.average_time;
+    e_copy.original_speed_profile = edge.speed_profile;
+    e_copy.original_road_type = edge.road_type;
     
-    edges[e.id] = e;
-    adjacency_list[e.u].push_back(e.id);
-    if (!e.oneway) {
-        adjacency_list[e.v].push_back(e.id);
+    edges[e_copy.id] = std::make_unique<Edge>(e_copy);
+    // ---
+    
+    adjacency_list[edge.u].push_back(edge.id);
+    if (!edge.oneway) {
+        adjacency_list[edge.v].push_back(edge.id);
     }
 }
 
 Node* Graph::get_node(int node_id) {
     auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() to return raw pointer from unique_ptr ---
+    return (it != nodes.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
 const Node* Graph::get_node(int node_id) const {
     auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() ---
+    return (it != nodes.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
 Edge* Graph::get_edge(int edge_id) {
     auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() ---
+    return (it != edges.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
 const Edge* Graph::get_edge(int edge_id) const {
     auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() ---
+    return (it != edges.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
 bool Graph::has_node(int node_id) const {
@@ -175,8 +201,10 @@ bool Graph::has_edge(int edge_id) const {
 bool Graph::remove_edge(int edge_id) {
     auto it = edges.find(edge_id);
     if (it != edges.end()) {
-        if (it->second.is_deleted) return false;
-        it->second.is_deleted = true;
+        // --- MODIFIED: Use -> to access member of pointed-to object ---
+        if (it->second->is_deleted) return false;
+        it->second->is_deleted = true;
+        // ---
         return true;
     }
     return false;
@@ -186,7 +214,10 @@ bool Graph::modify_edge(int edge_id, const Edge& patch, bool has_patch_data) {
     auto it = edges.find(edge_id);
     if (it == edges.end()) return false;
     
-    Edge& e = it->second;
+    // --- MODIFIED: Dereference unique_ptr to get a reference ---
+    Edge& e = *(it->second);
+    // ---
+    
     if (e.is_deleted) {
         if (!has_patch_data) {
             e.length = e.original_length;
@@ -251,7 +282,10 @@ double Graph::get_edge_time(int edge_id, int time_slot) const {
 int Graph::find_nearest_node(double lat, double lon) const {
     int nearest = -1;
     double min_dist = INF;
-    for (const auto& [id, node] : nodes) {
+    // --- MODIFIED: Loop over map of pointers ---
+    for (const auto& [id, node_ptr] : nodes) {
+        const Node& node = *node_ptr; // Dereference to get Node object
+        // ---
         double dist = euclidean_distance(lat, lon, node.lat, node.lon);
         if (dist < min_dist) {
             min_dist = dist;
@@ -799,8 +833,9 @@ int main(int argc, char* argv[]) {
 EOF
 
 echo "[7/20] Now creating COMPLETELY SEPARATE Phase-2 files..."
-echo "Creating Phase-2/Graph.hpp (same as Phase-1)..."
+echo "Creating Phase-2/Graph.hpp (copying from modified Phase-1)..."
 cp Phase-1/Graph.hpp Phase-2/
+echo "Creating Phase-2/Graph.cpp (copying from modified Phase-1)..."
 cp Phase-1/Graph.cpp Phase-2/
 
 echo "[8/20] Creating Phase-2/Algorithms.hpp with FIXED Yen's algorithm..."
@@ -1794,6 +1829,7 @@ cat > README.md << 'EOF'
 # CS293 Graph-Based Routing System v3.0
 
 **COMPLETELY REWRITTEN** with all critical fixes and complete Phase separation.
+**MEMORY MODEL**: This version now uses `std::unique_ptr` to store all `Node` and `Edge` objects on the heap, demonstrating modern C++ memory management and automatic resource cleanup (RAII).
 
 ## 🔥 What's New in v3.0
 
@@ -1810,6 +1846,7 @@ cat > README.md << 'EOF'
 ### Architecture Improvements
 - **Phase-1**: Only handles shortest path, KNN, dynamic updates
 - **Phase-2**: Only handles k-shortest paths, heuristics, approximate
+- **`std::unique_ptr`**: `Node` and `Edge` objects are stored as `std::unique_ptr` in the maps, ensuring they are on the heap and that their memory is *automatically* managed. No manual `delete` or complex destructors needed.
 - No cross-contamination between phases
 - Uses `unordered_map<int, double>` for distances (not fixed vectors)
 - Proper error handling with try-catch blocks
@@ -1831,572 +1868,3 @@ python3 generate_tests.py
 
 # View results
 python3 -m json.tool output1.json | head -50
-```
-
-## 📋 Features
-
-### Phase 1
-- ✅ Dijkstra shortest path (distance & time)
-- ✅ Time-dependent routing (96 slots)
-- ✅ Forbidden nodes & road types
-- ✅ KNN (Euclidean & shortest path)
-- ✅ Dynamic edge updates
-
-### Phase 2  
-- ✅ K shortest SIMPLE paths (Yen's - FIXED)
-- ✅ K shortest heuristic with overlap threshold
-- ✅ Approximate shortest paths (A* based)
-- ✅ Batch query processing with time budget
-
-## 🏗️ Project Structure
-
-```
-CS293_Project/
-├── Phase-1/              # Phase 1 ONLY
-│   ├── Graph.hpp/cpp
-│   ├── Algorithms.hpp/cpp    (Dijkstra, KNN only)
-│   ├── QueryHandler.hpp/cpp  (Phase 1 queries)
-│   └── SampleDriver.cpp
-├── Phase-2/              # Phase 2 ONLY  
-│   ├── Graph.hpp/cpp
-│   ├── Algorithms.hpp/cpp    (Yen's, A*, heuristics)
-│   ├── QueryHandler.hpp/cpp  (Phase 2 queries)
-│   └── SampleDriver.cpp
-├── Phase-3/              # TBD
-├── Makefile
-├── json.hpp
-├── generate_tests.py
-└── README.md
-```
-
-## 🔧 Compilation
-
-```bash
-# Build with optimizations
-make clean && make all
-
-# Compiler flags used:
-# -O3: Maximum optimization
-# -march=native: CPU-specific optimizations
-# -std=c++17: Modern C++ features
-```
-
-## 🧪 Testing
-
-```bash
-# Quick test
-make test
-
-# Manual testing
-python3 generate_tests.py
-./phase1 test_graph.json test_queries_phase1.json out1.json
-./phase2 test_graph.json test_queries_phase2.json out2.json
-
-# Stress test with large graph
-./phase1 test_graph_large.json test_queries_phase1.json out_large1.json
-./phase2 test_graph_large.json test_queries_phase2.json out_large2.json
-```
-
-## 📊 Performance Notes
-
-- **Maps vs Vectors**: `unordered_map` handles sparse node IDs efficiently
-- **A* Heuristic**: ~2-3x faster than Dijkstra for approximate queries
-- **Yen's Optimization**: Edge-based forbidding reduces candidates correctly
-- **Compiler Flags**: `-O3 -march=native` gives ~30-40% speedup
-
-## 🐛 Key Fixes from ChatGPT Feedback
-
-1. ✅ **Yen's forbids edges not nodes** - Critical correctness fix
-2. ✅ **Dijkstra supports forbidden_edges** - Extended Constraints struct
-3. ✅ **Graph validates edge endpoints** - Prevents invalid references
-4. ✅ **Maps for distances** - No fixed 100000 vector
-5. ✅ **A* for approximation** - Proper heuristic implementation
-6. ✅ **POI handling** - Checks for empty/missing POIs
-7. ✅ **Complete phase separation** - No more mixed query handlers
-
-## 📝 Important Notes
-
-1. **Simple Paths**: All k-shortest paths guaranteed loopless
-2. **POI Types**: restaurant, petrol station, hospital, pharmacy, hotel, atm
-3. **Road Types**: primary, secondary, tertiary, local, expressway
-4. **Time Budget**: Approximate queries stop at 85% of budget (safety margin)
-5. **Graph Constraints**: Phase-2 k-shortest limited to 5000 nodes/edges
-
-## 🎯 Optimization Opportunities
-
-For relative grading, consider implementing:
-- [ ] **Landmark-based A\*** for better heuristics
-- [ ] **Contraction Hierarchies** for preprocessing
-- [ ] **Bidirectional Dijkstra** for 2x speedup
-- [ ] **Path caching** for repeated queries
-- [ ] **Parallel processing** for batch queries
-
-## 📚 References
-
-- Yen, J. Y. (1971). "Finding the K Shortest Loopless Paths in a Network"
-- Hart, P. E., et al. (1968). "A* Search Algorithm"
-- Dijkstra, E. W. (1959). "A Note on Two Problems in Connexion with Graphs"
-
-## 🤝 Team
-
-[Add your team members]
-
----
-
-**Version**: 3.0 (Complete Rewrite)
-**Last Updated**: November 2025
-EOF
-
-echo "[17/20] Creating FIXES.md documentation..."
-cat > FIXES.md << 'EOF'
-# Critical Fixes Applied (v3.0)
-
-## 1. Yen's K-Shortest Paths Algorithm ✅ FIXED
-
-**Problem**: Original implementation forbid NODES instead of EDGES
-```cpp
-// WRONG (original)
-for (const auto& p : results) {
-    constraints.forbidden_nodes.insert(p.path[i + 1]);  // ❌
-}
-```
-
-**Fix**: Now correctly forbids specific edges
-```cpp
-// CORRECT (fixed)
-std::unordered_set<std::pair<int,int>, EdgeHash> forbidden_edges;
-for (const auto& p : results) {
-    forbidden_edges.insert({p.path[i], p.path[i + 1]});  // ✅
-}
-PathResult spur_path = dijkstra(graph, spur_node, target, forbidden_edges);
-```
-
-**Impact**: 
-- Yen's algorithm now finds correct k-shortest paths
-- No longer excludes valid alternative paths
-- Simple paths guaranteed through explicit checking
-
-## 2. Dijkstra with Edge Constraints ✅ FIXED
-
-**Problem**: Only supported node and road-type constraints
-
-**Fix**: Added `forbidden_edges` parameter
-```cpp
-PathResult dijkstra(
-    const Graph& graph,
-    int source,
-    int target,
-    const std::unordered_set<std::pair<int,int>, EdgeHash>& forbidden_edges
-) {
-    // Check if edge is forbidden
-    if (forbidden_edges.count({u, v})) continue;
-}
-```
-
-## 3. Distance Storage with Maps ✅ FIXED
-
-**Problem**: Fixed-size vector `dist(100000, INF)` wastes memory, assumes contiguous IDs
-
-**Fix**: Use unordered_map
-```cpp
-// OLD
-std::vector<double> dist(100000, INF);  // ❌ 800KB wasted
-
-// NEW  
-std::unordered_map<int, double> dist;  // ✅ Only stores reachable nodes
-```
-
-**Benefits**:
-- Handles sparse node IDs
-- Memory scales with reachable nodes, not total capacity
-- No more array bounds assumptions
-
-## 4. Edge Validation ✅ FIXED
-
-**Problem**: Adding edges without checking if nodes exist
-
-**Fix**: Validate in `Graph::add_edge`
-```cpp
-void Graph::add_edge(const Edge& edge) {
-    if (!has_node(edge.u) || !has_node(edge.v)) {
-        std::cerr << "Warning: Edge references non-existent nodes" << std::endl;
-        return;  // Skip invalid edge
-    }
-    // ... rest of code
-}
-```
-
-## 5. A* Implementation for Approximation ✅ ADDED
-
-**Problem**: Approximate shortest paths just ran Dijkstra until timeout
-
-**Fix**: Implemented proper A* with Euclidean heuristic
-```cpp
-PathResult astar(const Graph& graph, int source, int target, double heuristic_weight) {
-    f_score[source] = heuristic_weight * euclidean_heuristic(graph, source, target);
-    // ... A* search
-}
-```
-
-**Performance**: ~2-3x faster than Dijkstra for typical graphs
-
-## 6. POI Error Handling ✅ FIXED
-
-**Problem**: Assumed all nodes have POIs
-
-**Fix**: Check for empty POIs
-```cpp
-for (const auto& poi : node.pois) {
-    if (!poi.empty()) {  // ✅ Check before indexing
-        poi_index[poi].push_back(node.id);
-    }
-}
-```
-
-## 7. Complete Phase Separation ✅ IMPLEMENTED
-
-**Problem**: Phase-1 handled Phase-2 queries (confusion, bloat)
-
-**Fix**: Completely separate implementations
-- **Phase-1**: Only Dijkstra, KNN, updates
-- **Phase-2**: Only Yen's, heuristics, A*
-- No shared query handlers
-- Clear separation of concerns
-
-## 8. JSON Include Path ✅ IMPROVED
-
-**Problem**: Brittle `../json.hpp` path
-
-**Fix**: 
-- Download to project root
-- Use `-I.` in Makefile
-- Document in README
-
-## 9. Error Handling ✅ ENHANCED
-
-**Added**:
-- Try-catch blocks around all query processing
-- Graceful error messages
-- Continue processing after exceptions
-- JSON validation with `.value()` and `.contains()`
-
-## 10. Performance Optimizations ✅ ADDED
-
-**Compiler**:
-- `-O3`: Maximum optimization
-- `-march=native`: CPU-specific instructions
-- Better algorithms (A*, edge-based Yen's)
-
-**Memory**:
-- Maps instead of vectors: ~40% less memory for sparse graphs
-- Only store reachable nodes in Dijkstra
-
-**Algorithm**:
-- A* with tunable heuristic weight
-- Early termination in approximate queries (85% budget)
-- Simple path checking with early exit
-
-## Testing Improvements ✅
-
-1. **Connectivity guarantee**: Spanning tree + random edges
-2. **Better POI distribution**: Ensures queries can find POIs
-3. **Varied test sizes**: Small (20), medium (100), large (1000) nodes
-4. **Realistic constraints**: Grid layout, proper distances
-
-## What's Still TODO
-
-### For Phase 2 Optimization:
-- [ ] Bidirectional Dijkstra (2x speedup potential)
-- [ ] Landmark-based heuristics (ALT algorithm)
-- [ ] Contraction hierarchies preprocessing
-- [ ] Path caching for repeated queries
-
-### For Phase 3:
-- [ ] TSP heuristics (nearest neighbor, 2-opt, simulated annealing)
-- [ ] Multi-vehicle assignment
-- [ ] Pickup/delivery constraints
-
-## Verification
-
-Run these to verify fixes:
-```bash
-# Build and test
-make clean && make all
-python3 generate_tests.py
-
-# Test Yen's correctness
-./phase2 test_graph.json test_queries_phase2.json out2.json
-python3 -m json.tool out2.json | grep -A 20 "k_shortest_paths"
-
-# Test large graph (sparse IDs)
-./phase1 test_graph_large.json test_queries_phase1.json out_large.json
-
-# Benchmark
-time ./phase2 test_graph_large.json test_queries_phase2.json out_bench.json
-```
-
----
-
-**All critical issues resolved. Code is production-ready.**
-EOF
-
-echo "[18/20] Creating .gitignore..."
-cat > .gitignore << 'EOF'
-# Executables
-phase1
-phase2
-phase3
-*.exe
-
-# Object files
-*.o
-*.obj
-
-# Output files
-output*.json
-out*.json
-test_graph*.json
-test_queries*.json
-
-# System files
-.DS_Store
-*.swp
-*~
-
-# IDE
-.vscode/
-.idea/
-*.sublime-*
-
-# Build
-build/
-dist/
-EOF
-
-echo "[19/20] Creating quick test script..."
-cat > run_tests.sh << 'EOF'
-#!/bin/bash
-
-echo "===== CS293 Project Test Suite ====="
-echo ""
-
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-# Build
-echo "Building..."
-make clean > /dev/null 2>&1
-if make all > /dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} Build successful"
-else
-    echo -e "${RED}✗${NC} Build failed"
-    exit 1
-fi
-
-# Generate tests
-echo "Generating test cases..."
-if python3 generate_tests.py > /dev/null 2>&1; then
-    echo -e "${GREEN}✓${NC} Test generation successful"
-else
-    echo -e "${RED}✗${NC} Test generation failed"
-    exit 1
-fi
-
-# Test Phase 1
-echo ""
-echo "Testing Phase 1..."
-if ./phase1 test_graph.json test_queries_phase1.json output1.json 2>&1 | grep -q "Done"; then
-    echo -e "${GREEN}✓${NC} Phase 1 completed"
-    queries=$(cat output1.json | python3 -c "import json, sys; print(len(json.load(sys.stdin)['results']))" 2>/dev/null)
-    echo "  Processed $queries queries"
-else
-    echo -e "${RED}✗${NC} Phase 1 failed"
-fi
-
-# Test Phase 2
-echo ""
-echo "Testing Phase 2..."
-if ./phase2 test_graph.json test_queries_phase2.json output2.json 2>&1 | grep -q "Done"; then
-    echo -e "${GREEN}✓${NC} Phase 2 completed"
-    queries=$(cat output2.json | python3 -c "import json, sys; print(len(json.load(sys.stdin)['results']))" 2>/dev/null)
-    echo "  Processed $queries queries"
-else
-    echo -e "${RED}✗${NC} Phase 2 failed"
-fi
-
-echo ""
-echo "===== All Tests Complete ====="
-EOF
-
-chmod +x run_tests.sh
-
-echo "[20/20] Creating final summary..."
-cat > SUMMARY.md << 'EOF'
-# Implementation Summary
-
-## What We Built
-
-A complete graph-based routing system with two distinct phases:
-
-### Phase 1: Core Routing
-- **Dijkstra's Algorithm**: Optimized shortest path with constraints
-- **Time-Dependent Routing**: 96 time slots for traffic modeling
-- **KNN Search**: Euclidean and graph-distance based
-- **Dynamic Updates**: Edge removal/modification with restoration
-
-### Phase 2: Advanced Algorithms  
-- **Yen's K-Shortest Paths**: Correctly implemented with edge-level constraints
-- **Heuristic Path Selection**: Minimizes overlap while maintaining quality
-- **A* Search**: Fast approximate shortest paths
-- **Batch Processing**: Handles multiple queries within time budget
-
-## Key Algorithms
-
-### 1. Dijkstra (Phase 1 & 2)
-- **Time**: O((V + E) log V)
-- **Space**: O(V) with maps
-- **Features**: Supports node/edge/type constraints
-
-### 2. Yen's K-Shortest (Phase 2)
-- **Time**: O(K × V × (E + V log V))
-- **Space**: O(K × V)
-- **Key Fix**: Forbids edges, not nodes
-
-### 3. A* Search (Phase 2)
-- **Time**: O((V + E) log V) average, faster with good heuristic
-- **Space**: O(V)
-- **Heuristic**: Euclidean distance
-
-## Data Structures
-
-| Structure | Phase 1 | Phase 2 | Why |
-|-----------|---------|---------|-----|
-| `unordered_map<int, Node>` | ✓ | ✓ | Sparse node IDs |
-| `unordered_map<int, Edge>` | ✓ | ✓ | Fast edge lookup |
-| `unordered_map<int, vector<int>>` | ✓ | ✓ | Adjacency list |
-| `unordered_map<string, vector<int>>` | ✓ | - | POI index |
-| `unordered_map<int, double>` | ✓ | ✓ | Distance storage |
-| `unordered_set<pair<int,int>>` | - | ✓ | Forbidden edges |
-
-## Performance Optimizations
-
-1. **Compiler Flags**: `-O3 -march=native` (~30% faster)
-2. **Maps over Vectors**: Handles sparse graphs efficiently
-3. **A* Heuristic**: 2-3x faster for approximate queries
-4. **Early Termination**: Stops at 85% time budget
-5. **Simple Path Caching**: Avoids duplicate path checking
-
-## Testing Strategy
-
-### Test Coverage
-- **Small**: 20 nodes, 40 edges (functional testing)
-- **Medium**: 100 nodes, 250 edges (integration)
-- **Large**: 1000 nodes, 3000 edges (stress testing)
-
-### Query Distribution
-- **Phase 1**: 40% shortest path, 30% KNN, 30% updates
-- **Phase 2**: 40% k-shortest, 30% heuristic, 30% approximate
-
-## Complexity Analysis
-
-### Phase 1
-
-| Operation | Time | Space |
-|-----------|------|-------|
-| Shortest Path (Dijkstra) | O((V+E) log V) | O(V) |
-| Time-Dependent Path | O((V+E) log V) | O(V) |
-| KNN Euclidean | O(P log P) | O(P) |
-| KNN Shortest Path | O((V+E) log V + P log P) | O(V) |
-| Edge Update | O(1) | O(1) |
-
-### Phase 2
-
-| Operation | Time | Space |
-|-----------|------|-------|
-| K-Shortest (Yen's) | O(K×V×(E+V log V)) | O(K×V) |
-| Heuristic Selection | O(K²×E) | O(K×V) |
-| A* Approximate | O((V+E) log V) avg | O(V) |
-| Batch Queries | O(Q×(V+E) log V) | O(V) |
-
-## Memory Usage
-
-**Small Graph (20 nodes, 40 edges)**:
-- Nodes: ~2 KB
-- Edges: ~5 KB  
-- Indices: ~1 KB
-- **Total**: ~8 KB
-
-**Large Graph (1000 nodes, 3000 edges)**:
-- Nodes: ~100 KB
-- Edges: ~400 KB
-- Indices: ~50 KB
-- **Total**: ~550 KB
-
-Very efficient even for large graphs!
-
-## Known Limitations
-
-1. **Yen's Performance**: O(K×V²) can be slow for k > 10 on dense graphs
-2. **Simple Path Check**: O(V) per path validation
-3. **No Preprocessing**: Could add landmarks, CH for faster queries
-4. **A* Heuristic**: Euclidean is admissible but not always tight
-
-## Future Enhancements
-
-### High Priority
-- [ ] Bidirectional Dijkstra (easy 2x speedup)
-- [ ] ALT (A*, Landmarks, Triangle inequality)
-- [ ] Path caching for repeated queries
-
-### Medium Priority
-- [ ] Contraction Hierarchies preprocessing
-- [ ] Parallel batch query processing
-- [ ] Better heuristics for Yen's
-
-### Low Priority
-- [ ] Turn restrictions
-- [ ] Multi-modal routing
-- [ ] Real-time traffic integration
-
-## Conclusion
-
-We've built a robust, efficient routing system that:
-- ✅ Correctly implements all required algorithms
-- ✅ Handles all specified query types
-- ✅ Includes proper error handling
-- ✅ Optimized for relative grading
-- ✅ Well-documented and modular
-- ✅ Ready for Phase 3 (TSP) implementation
-
-**Ready for submission and viva!**
-EOF
-
-echo ""
-echo "=========================================="
-echo "✅ Setup Complete! (v3.0)"
-echo "=========================================="
-echo ""
-echo "📁 Project created in: CS293_Project/"
-echo ""
-echo "🔥 MAJOR IMPROVEMENTS:"
-echo "  ✓ Fixed Yen's algorithm (edge-based forbidding)"
-echo "  ✓ Complete Phase-1/Phase-2 separation"
-echo "  ✓ Maps instead of fixed vectors"
-echo "  ✓ A* for fast approximation"
-echo "  ✓ Comprehensive error handling"
-echo "  ✓ Performance optimizations"
-echo ""
-echo "📋 Next Steps:"
-echo "  1. cd CS293_Project"
-echo "  2. make all"
-echo "  3. ./run_tests.sh"
-echo ""
-echo "📚 Documentation:"
-echo "  - README.md: Quick start guide"
-echo "  - FIXES.md: All critical fixes explained"
-echo "  - SUMMARY.md: Implementation overview"
-echo ""
-echo "🚀 Ready for development!"
-echo "=========================================="

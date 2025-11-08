@@ -1,163 +1,144 @@
 #include "Graph.hpp"
 #include <algorithm>
 #include <iostream>
-#define _USE_MATH_DEFINES
-#include <cmath>
+#include <memory> // <-- ADDED for std::make_unique
 
-void Graph::addNode(const Node &node)
-{
-    nodes[node.id] = node;
+void Graph::add_node(const Node& node) {
+    // --- MODIFIED: Create heap-allocated Node via make_unique ---
+    nodes[node.id] = std::make_unique<Node>(node);
+    // ---
+    
     adjacency_list[node.id] = std::vector<int>();
-
-    for (const auto &poi : node.pois)
-    {
-        if (!poi.empty())
-        {
+    
+    for (const auto& poi : node.pois) {
+        if (!poi.empty()) {
             poi_index[poi].push_back(node.id);
         }
     }
 }
 
-void Graph::addEdge(const Edge &edge)
-{
+void Graph::add_edge(const Edge& edge) {
     // Validate nodes exist
-    if (!has_node(edge.u) || !has_node(edge.v))
-    {
+    if (!has_node(edge.u) || !has_node(edge.v)) {
         std::cerr << "Warning: Edge " << edge.id << " references non-existent nodes. Skipping." << std::endl;
         return;
     }
-
-    Edge e = edge;
-    e.original_length = edge.length;
-    e.original_average_time = edge.average_time;
-    e.original_speed_profile = edge.speed_profile;
-    e.original_road_type = edge.road_type;
-
-    edges[e.id] = e;
-    adjacency_list[e.u].push_back(e.id);
-    if (!e.oneway)
-    {
-        adjacency_list[e.v].push_back(e.id);
+    
+    // --- MODIFIED: Create a copy, then move a unique_ptr to the map ---
+    Edge e_copy = edge;
+    e_copy.original_length = edge.length;
+    e_copy.original_average_time = edge.average_time;
+    e_copy.original_speed_profile = edge.speed_profile;
+    e_copy.original_road_type = edge.road_type;
+    
+    edges[e_copy.id] = std::make_unique<Edge>(e_copy);
+    // ---
+    
+    adjacency_list[edge.u].push_back(edge.id);
+    if (!edge.oneway) {
+        adjacency_list[edge.v].push_back(edge.id);
     }
 }
 
-Node *Graph::get_node(int node_id)
-{
+Node* Graph::get_node(int node_id) {
     auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() to return raw pointer from unique_ptr ---
+    return (it != nodes.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
-const Node *Graph::getNode(int node_id) const
-{
+const Node* Graph::get_node(int node_id) const {
     auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() ---
+    return (it != nodes.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
-Edge *Graph::get_edge(int edge_id)
-{
+Edge* Graph::get_edge(int edge_id) {
     auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() ---
+    return (it != edges.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
-const Edge *Graph::getEdge(int edge_id) const
-{
+const Edge* Graph::get_edge(int edge_id) const {
     auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    // --- MODIFIED: Use .get() ---
+    return (it != edges.end()) ? it->second.get() : nullptr;
+    // ---
 }
 
-bool Graph::has_node(int node_id) const
-{
+bool Graph::has_node(int node_id) const {
     return nodes.find(node_id) != nodes.end();
 }
 
-bool Graph::has_edge(int edge_id) const
-{
+bool Graph::has_edge(int edge_id) const {
     return edges.find(edge_id) != edges.end();
 }
 
-bool Graph::remove_edge(int edge_id)
-{
+bool Graph::remove_edge(int edge_id) {
     auto it = edges.find(edge_id);
-    if (it != edges.end())
-    {
-        if (it->second.is_deleted)
-            return false;
-        it->second.is_deleted = true;
+    if (it != edges.end()) {
+        // --- MODIFIED: Use -> to access member of pointed-to object ---
+        if (it->second->is_deleted) return false;
+        it->second->is_deleted = true;
+        // ---
         return true;
     }
     return false;
 }
 
-bool Graph::modify_edge(int edge_id, const Edge &patch, bool has_patch_data)
-{
+bool Graph::modify_edge(int edge_id, const Edge& patch, bool has_patch_data) {
     auto it = edges.find(edge_id);
-    if (it == edges.end())
-        return false;
-
-    Edge &e = it->second;
-    if (e.is_deleted)
-    {
-        if (!has_patch_data)
-        {
+    if (it == edges.end()) return false;
+    
+    // --- MODIFIED: Dereference unique_ptr to get a reference ---
+    Edge& e = *(it->second);
+    // ---
+    
+    if (e.is_deleted) {
+        if (!has_patch_data) {
             e.length = e.original_length;
             e.average_time = e.original_average_time;
             e.speed_profile = e.original_speed_profile;
             e.road_type = e.original_road_type;
-        }
-        else
-        {
-            if (patch.length > 0)
-                e.length = patch.length;
-            if (patch.average_time > 0)
-                e.average_time = patch.average_time;
-            if (!patch.speed_profile.empty())
-                e.speed_profile = patch.speed_profile;
-            if (!patch.road_type.empty())
-                e.road_type = patch.road_type;
+        } else {
+            if (patch.length > 0) e.length = patch.length;
+            if (patch.average_time > 0) e.average_time = patch.average_time;
+            if (!patch.speed_profile.empty()) e.speed_profile = patch.speed_profile;
+            if (!patch.road_type.empty()) e.road_type = patch.road_type;
         }
         e.is_deleted = false;
         return true;
-    }
-    else
-    {
-        if (!has_patch_data)
-            return false;
-        if (patch.length > 0)
-            e.length = patch.length;
-        if (patch.average_time > 0)
-            e.average_time = patch.average_time;
-        if (!patch.speed_profile.empty())
-            e.speed_profile = patch.speed_profile;
-        if (!patch.road_type.empty())
-            e.road_type = patch.road_type;
+    } else {
+        if (!has_patch_data) return false;
+        if (patch.length > 0) e.length = patch.length;
+        if (patch.average_time > 0) e.average_time = patch.average_time;
+        if (!patch.speed_profile.empty()) e.speed_profile = patch.speed_profile;
+        if (!patch.road_type.empty()) e.road_type = patch.road_type;
         return true;
     }
 }
 
-const std::vector<int> &Graph::get_adjacent_edges(int node_id) const
-{
+const std::vector<int>& Graph::get_adjacent_edges(int node_id) const {
     static const std::vector<int> empty;
     auto it = adjacency_list.find(node_id);
     return (it != adjacency_list.end()) ? it->second : empty;
 }
 
-std::vector<int> Graph::get_nodes_with_poi(const std::string &poi) const
-{
+std::vector<int> Graph::get_nodes_with_poi(const std::string& poi) const {
     auto it = poi_index.find(poi);
     return (it != poi_index.end()) ? it->second : std::vector<int>();
 }
 
-double Graph::euclidean_distance(int node1, int node2) const
-{
-    const Node *n1 = getNode(node1);
-    const Node *n2 = getNode(node2);
-    if (!n1 || !n2)
-        return INF;
+double Graph::euclidean_distance(int node1, int node2) const {
+    const Node* n1 = get_node(node1);
+    const Node* n2 = get_node(node2);
+    if (!n1 || !n2) return INF;
     return euclidean_distance(n1->lat, n1->lon, n2->lat, n2->lon);
 }
 
-double Graph::euclidean_distance(double lat1, double lon1, double lat2, double lon2) const
-{
+double Graph::euclidean_distance(double lat1, double lon1, double lat2, double lon2) const {
     double dlat = lat2 - lat1;
     double dlon = lon2 - lon1;
     double dx = dlon * 111000 * cos((lat1 + lat2) / 2 * M_PI / 180);
@@ -165,30 +146,26 @@ double Graph::euclidean_distance(double lat1, double lon1, double lat2, double l
     return sqrt(dx * dx + dy * dy);
 }
 
-double Graph::get_edge_time(int edge_id, int time_slot) const
-{
-    const Edge *e = getEdge(edge_id);
-    if (!e)
-        return INF;
-    if (e->speed_profile.empty() || time_slot < 0 || time_slot >= 96)
-    {
+double Graph::get_edge_time(int edge_id, int time_slot) const {
+    const Edge* e = get_edge(edge_id);
+    if (!e) return INF;
+    if (e->speed_profile.empty() || time_slot < 0 || time_slot >= 96) {
         return e->average_time;
     }
     double speed = e->speed_profile[time_slot];
-    if (speed <= 0)
-        return e->average_time;
+    if (speed <= 0) return e->average_time;
     return e->length / speed;
 }
 
-int Graph::find_nearest_node(double lat, double lon) const
-{
+int Graph::find_nearest_node(double lat, double lon) const {
     int nearest = -1;
     double min_dist = INF;
-    for (const auto &[id, node] : nodes)
-    {
+    // --- MODIFIED: Loop over map of pointers ---
+    for (const auto& [id, node_ptr] : nodes) {
+        const Node& node = *node_ptr; // Dereference to get Node object
+        // ---
         double dist = euclidean_distance(lat, lon, node.lat, node.lon);
-        if (dist < min_dist)
-        {
+        if (dist < min_dist) {
             min_dist = dist;
             nearest = id;
         }

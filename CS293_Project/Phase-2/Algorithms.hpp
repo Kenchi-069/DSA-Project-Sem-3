@@ -14,19 +14,11 @@ struct PathResult {
     PathResult() : possible(false), cost(INF) {}
 };
 
-struct EdgeHash
-{
-    std::size_t operator()(const std::pair<int, int> &p) const
-    {
-        return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
-    }
-};
-
 // FIXED: Added forbidden_edges for proper Yen's implementation
 struct Constraints {
     std::unordered_set<int> forbidden_nodes;
     std::unordered_set<std::string> forbidden_road_types;
-    std::unordered_set<std::pair<int,int>, EdgeHash> forbidden_edges;
+    std::unordered_set<std::pair<int,int>, boost::hash<std::pair<int,int>>> forbidden_edges;
     
     bool is_node_forbidden(int node_id) const {
         return forbidden_nodes.count(node_id) > 0;
@@ -39,20 +31,26 @@ struct Constraints {
     }
 };
 
+struct EdgeHash {
+    std::size_t operator()(const std::pair<int, int>& p) const {
+        return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
+    }
+};
+
 class AlgorithmsPhase2 {
 public:
     // Phase 2 specific queries
     static std::vector<PathResult> k_shortest_paths(const Graph& graph, int source, int target, int k);
     static std::vector<PathResult> k_shortest_paths_heuristic(const Graph& graph, int source, int target, int k, int overlap_threshold);
-    static std::vector<std::pair<int, int>> approximate_shortest_paths(const Graph &graph, const std::vector<std::pair<int, int>> &queries, double time_budget_ms, double acceptable_error_pct);
-
-    // A* for approximate shortest paths
-    static PathResult astar(const Graph &graph, int source, int target, double heuristic_weight);
-
+    static std::vector<std::pair<int, int>> approximate_shortest_paths(const Graph& graph, const std::vector<std::pair<int, int>>& queries, double time_budget_ms, double acceptable_error_pct);
+    
 private:
     // Basic Dijkstra with edge constraints
     static PathResult dijkstra(const Graph& graph, int source, int target, const std::unordered_set<std::pair<int,int>, EdgeHash>& forbidden_edges);
     static PathResult dijkstra_simple(const Graph& graph, int source, int target);
+    
+    // A* for approximate shortest paths
+    static PathResult astar(const Graph& graph, int source, int target, double heuristic_weight);
     
     static bool is_simple_path(const std::vector<int>& path);
     static double calculate_edge_overlap_percent(const std::vector<int>& path1, const std::vector<int>& path2);
