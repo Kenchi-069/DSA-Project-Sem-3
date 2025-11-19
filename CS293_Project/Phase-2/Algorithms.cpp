@@ -342,7 +342,6 @@ double AlgorithmsPhase2::euclidean_heuristic(const Graph &graph, int from, int t
     return graph.nodeDistance(from, to);
 }
 
-// A* for faster approximate shortest paths
 PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, double heuristic_weight)
 {
     PathResult result;
