@@ -324,11 +324,10 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
     }
 
     const int BEAM_SIZE = 20;
-    using State = std::vector<int>;
 
-    std::vector<State> beam = {{0}};
+    std::vector<std::vector<int>> beam = {{0}};
 
-    auto compute_penalty = [&](const State &S)
+    auto compute_penalty = [&](const std::vector<int> &S)
     {
         double tot = 0;
         for (int idx_a : S)
@@ -350,7 +349,7 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
 
     for (int step = 2; step <= k; step++)
     {
-        std::vector<std::pair<double, State>> next_beam;
+        std::vector<std::pair<double, std::vector<int>>> next_beam;
 
         for (const auto &partial : beam)
         {
@@ -358,7 +357,7 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
 
             for (int i = last_idx + 1; i < n; i++)
             {
-                State newset = partial;
+                std::vector<int> newset = partial;
                 newset.push_back(i);
 
                 double p = compute_penalty(newset);
@@ -381,7 +380,7 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
             beam.push_back(x.second);
     }
 
-    State best_state = beam[0];
+    std::vector<int> best_state = beam[0];
 
     double best_val = compute_penalty(best_state);
     for (auto &s : beam)
