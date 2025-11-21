@@ -123,13 +123,12 @@ json QueryHandlerPhase2::handleApproxShortestPath(const json &query)
     result["distances"] = json::array();
 
     // For each processed query, compute actual distance
-    for (const auto &[src, tgt] : processed)
+    for (const auto &[src, tgt, cost] : processed)
     {
-        PathResult path = AlgorithmsPhase2::astar(graph, src, tgt, 1.0);
         json dist_obj;
         dist_obj["source"] = src;
         dist_obj["target"] = tgt;
-        dist_obj["approx_shortest_distance"] = path.possible ? path.cost : -1;
+        dist_obj["approx_shortest_distance"] = cost;
         result["distances"].push_back(dist_obj);
     }
 

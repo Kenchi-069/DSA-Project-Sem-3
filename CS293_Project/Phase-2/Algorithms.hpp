@@ -15,6 +15,13 @@ struct PathResult
     PathResult() : possible(false), cost(INF) {}
 };
 
+struct ApproxResult
+{
+    int source;
+    int target;
+    double distance;
+};
+
 struct EdgeHash
 {
     std::size_t operator()(const std::pair<int, int> &p) const
@@ -26,24 +33,19 @@ struct EdgeHash
 class AlgorithmsPhase2
 {
 public:
-    // Phase 2 specific queries
     static std::vector<PathResult> k_shortest_paths(const Graph &graph, int source, int target, int k);
     static std::vector<PathResult> k_shortest_paths_heuristic(const Graph &graph, int source, int target, int k, int overlap_threshold);
-    static std::vector<std::pair<int, int>> approximate_shortest_paths(const Graph &graph, const std::vector<std::pair<int, int>> &queries, double time_budget_ms, double acceptable_error_pct);
-
-    // A* for approximate shortest paths
+    static std::vector<ApproxResult> approximate_shortest_paths(const Graph &graph, const std::vector<std::pair<int, int>> &queries, double time_budget_ms, double acceptable_error_pct);
     static PathResult astar(const Graph &graph, int source, int target, double heuristic_weight);
 
 private:
-    // Basic Dijkstra with edge constraints
-    static PathResult dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges);
-    static PathResult dijkstra_simple(const Graph &graph, int source, int target);
+    static PathResult dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges, const std::unordered_set<int> &forbidden_nodes);
+    static PathResult dijkstraSimple(const Graph &graph, int source, int target);
 
-    static bool is_simple_path(const std::vector<int> &path);
-    static double calculate_edge_overlap_percent(const std::vector<int> &path1, const std::vector<int> &path2);
+    static bool isSimplePath(const std::vector<int> &path);
+    static double OverlappingEdgePercent(const std::vector<int> &path1, const std::vector<int> &path2);
 
-    // Helper for heuristic calculation
-    static double euclidean_heuristic(const Graph &graph, int from, int to);
+    static double euclideanHeuristic(const Graph &graph, int from, int to);
 };
 
 #endif

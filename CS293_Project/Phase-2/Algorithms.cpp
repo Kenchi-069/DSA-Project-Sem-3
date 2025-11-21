@@ -6,7 +6,7 @@
 #include <cmath>
 #include <iostream>
 
-bool AlgorithmsPhase2::is_simple_path(const std::vector<int> &path)
+bool AlgorithmsPhase2::isSimplePath(const std::vector<int> &path)
 {
     std::unordered_set<int> visited;
     for (int node : path)
@@ -18,33 +18,33 @@ bool AlgorithmsPhase2::is_simple_path(const std::vector<int> &path)
     return true;
 }
 
-double AlgorithmsPhase2::calculate_edge_overlap_percent(const std::vector<int> &path1, const std::vector<int> &path2)
+double AlgorithmsPhase2::OverlappingEdgePercent(const std::vector<int> &pathBase, const std::vector<int> &pathReference)
 {
-    if (path1.size() < 2 || path2.size() < 2)
+    if (pathBase.size() < 2 || pathReference.size() < 2)
         return 0.0;
 
-    std::set<std::pair<int, int>> edges1;
-    for (size_t i = 0; i < path1.size() - 1; i++)
+    std::unordered_set<std::pair<int, int>, EdgeHash> refEdges;
+    for (size_t i = 0; i < pathReference.size() - 1; i++)
     {
-        int u = path1[i], v = path1[i + 1];
-        edges1.insert({std::min(u, v), std::max(u, v)});
+        int u = pathReference[i], v = pathReference[i + 1];
+        refEdges.insert({std::min(u, v), std::max(u, v)});
     }
 
     int common_edges = 0;
-    for (size_t i = 0; i < path2.size() - 1; i++)
+    for (size_t i = 0; i < pathBase.size() - 1; i++)
     {
-        int u = path2[i], v = path2[i + 1];
-        if (edges1.count({std::min(u, v), std::max(u, v)}))
+        int u = pathBase[i], v = pathBase[i + 1];
+        if (refEdges.count({std::min(u, v), std::max(u, v)}))
         {
             common_edges++;
         }
     }
 
-    int total_edges = static_cast<int>(path2.size()) - 1;
+    int total_edges = static_cast<int>(pathBase.size()) - 1;
     return total_edges > 0 ? (100.0 * common_edges / total_edges) : 0.0;
 }
 
-PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int target)
+PathResult AlgorithmsPhase2::dijkstraSimple(const Graph &graph, int source, int target)
 {
     PathResult result;
     if (!graph.hasNode(source) || !graph.hasNode(target))
@@ -52,9 +52,7 @@ PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int
 
     std::unordered_map<int, double> dist;
     std::unordered_map<int, int> parent;
-
-    using PQElement = std::pair<double, int>;
-    std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
+    std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     dist[source] = 0;
     pq.push({0, source});
@@ -63,22 +61,18 @@ PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int
     {
         auto [d, u] = pq.top();
         pq.pop();
+
         if (dist.count(u) && d > dist[u])
             continue;
+
         if (u == target)
         {
             result.possible = true;
-            result.cost = dist[u];
-            std::vector<int> path;
-            int curr = target;
-            while (parent.count(curr))
-            {
-                path.push_back(curr);
-                curr = parent[curr];
-            }
-            path.push_back(source);
-            std::reverse(path.begin(), path.end());
-            result.path = path;
+            result.cost = d;
+            for (int cur = target; cur != source; cur = parent[cur])
+                result.path.push_back(cur);
+            result.path.push_back(source);
+            std::reverse(result.path.begin(), result.path.end());
             return result;
         }
 
@@ -92,8 +86,7 @@ PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int
             if (e->oneway && e->u != u)
                 continue;
 
-            double edge_cost = e->length;
-            double new_dist = dist[u] + edge_cost;
+            double new_dist = d + e->length;
             if (!dist.count(v) || new_dist < dist[v])
             {
                 dist[v] = new_dist;
@@ -102,21 +95,22 @@ PathResult AlgorithmsPhase2::dijkstra_simple(const Graph &graph, int source, int
             }
         }
     }
+
     return result;
 }
 
-// FIXED: Dijkstra with edge-level constraints for Yen's algorithm
-PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges)
+// Dijkstra with constraints for Yen's algorithm
+PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges, const std::unordered_set<int> &forbidden_nodes)
 {
     PathResult result;
     if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
+    if (forbidden_nodes.count(source))
+        return result;
 
     std::unordered_map<int, double> dist;
     std::unordered_map<int, int> parent;
-
-    using PQElement = std::pair<double, int>;
-    std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
+    std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     dist[source] = 0;
     pq.push({0, source});
@@ -126,6 +120,8 @@ PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target
         auto [d, u] = pq.top();
         pq.pop();
         if (dist.count(u) && d > dist[u])
+            continue;
+        if (forbidden_nodes.count(u))
             continue;
         if (u == target)
         {
@@ -154,11 +150,12 @@ PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target
             if (e->oneway && e->u != u)
                 continue;
 
-            // FIXED: Check if this specific edge is forbidden
             if (forbidden_edges.count({u, v}))
                 continue;
             if (!e->oneway && forbidden_edges.count({v, u}))
                 continue;
+            if (forbidden_nodes.count(v))
+                continue;
 
             double edge_cost = e->length;
             double new_dist = dist[u] + edge_cost;
@@ -173,167 +170,238 @@ PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target
     return result;
 }
 
-// FIXED: Yen's K Shortest Paths with proper edge forbidding
-std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, int source, int target, int k)
+// Yen's K Shortest Paths
+std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(
+    const Graph &graph, int source, int target, int k)
 {
     std::vector<PathResult> results;
 
-    PathResult first = dijkstra_simple(graph, source, target);
-    if (!first.possible || !is_simple_path(first.path))
+    PathResult first = dijkstraSimple(graph, source, target);
+    if (!first.possible || !isSimplePath(first.path))
         return results;
+
     results.push_back(first);
 
     using PathCandidate = std::pair<double, PathResult>;
-
     struct ComparePathCandidate
     {
         bool operator()(const PathCandidate &a, const PathCandidate &b) const noexcept
         {
-            return a.first > b.first; // smaller cost → higher priority
+            return a.first > b.first;
         }
     };
 
-    std::priority_queue<PathCandidate, std::vector<PathCandidate>, ComparePathCandidate> candidates;
+    std::priority_queue<PathCandidate,
+                        std::vector<PathCandidate>,
+                        ComparePathCandidate>
+        candidates;
 
     std::set<std::vector<int>> seen_paths;
     seen_paths.insert(first.path);
 
-    for (int k_iter = 1; k_iter < k; k_iter++)
+    for (int kth = 1; kth < k; kth++)
     {
-        const PathResult &prev_path = results.back();
+        const auto &prev = results.back();
 
-        for (size_t i = 0; i < prev_path.path.size() - 1; i++)
+        for (size_t i = 0; i + 1 < prev.path.size(); i++)
         {
-            int spur_node = prev_path.path[i];
-            std::vector<int> root_path(prev_path.path.begin(), prev_path.path.begin() + i + 1);
+            int spur_node = prev.path[i];
+            std::vector<int> root_path(prev.path.begin(), prev.path.begin() + i + 1);
 
-            // FIXED: Forbid edges instead of nodes
             std::unordered_set<std::pair<int, int>, EdgeHash> forbidden_edges;
+            std::unordered_set<int> forbidden_nodes;
 
-            // Forbid edges from previously found paths with same root
             for (const auto &p : results)
             {
-                if (p.path.size() > i + 1)
+                if (p.path.size() > i &&
+                    std::equal(root_path.begin(), root_path.end(), p.path.begin()))
                 {
-                    bool same_root = true;
-                    for (size_t j = 0; j <= i; j++)
-                    {
-                        if (j >= p.path.size() || p.path[j] != root_path[j])
-                        {
-                            same_root = false;
-                            break;
-                        }
-                    }
-                    if (same_root)
-                    {
-                        // Forbid the edge from spur_node to next node in this path
-                        forbidden_edges.insert({p.path[i], p.path[i + 1]});
-                    }
+                    forbidden_edges.insert({p.path[i], p.path[i + 1]});
                 }
             }
 
-            // Forbid edges in the root path (to avoid reusing them)
-            for (size_t j = 0; j < root_path.size() - 1; j++)
+            for (size_t j = 0; j + 1 < root_path.size(); j++)
+                forbidden_nodes.insert(root_path[j]);
+
+            PathResult spur_path = dijkstra(graph, spur_node, target,
+                                            forbidden_edges, forbidden_nodes);
+
+            if (!spur_path.possible)
+                continue;
+
+            PathResult total_path;
+            total_path.possible = true;
+            total_path.path = root_path;
+            total_path.path.insert(total_path.path.end(),
+                                   spur_path.path.begin() + 1,
+                                   spur_path.path.end());
+
+            if (!isSimplePath(total_path.path))
+                continue;
+            if (seen_paths.count(total_path.path))
+                continue;
+
+            double root_cost = 0;
+
+            for (size_t j = 0; j + 1 < root_path.size(); j++)
             {
-                forbidden_edges.insert({root_path[j], root_path[j + 1]});
-            }
+                int a = root_path[j];
+                int b = root_path[j + 1];
 
-            PathResult spur_path = dijkstra(graph, spur_node, target, forbidden_edges);
+                double best = 1e100;
 
-            if (spur_path.possible)
-            {
-                PathResult total_path;
-                total_path.possible = true;
-                total_path.path = root_path;
-                total_path.path.insert(total_path.path.end(), spur_path.path.begin() + 1, spur_path.path.end());
-
-                if (!is_simple_path(total_path.path))
-                    continue;
-                if (seen_paths.count(total_path.path))
-                    continue;
-
-                // Calculate total cost
-                total_path.cost = 0;
-                for (size_t j = 0; j < total_path.path.size() - 1; j++)
+                for (int eid : graph.getAdjEdges(a))
                 {
-                    PathResult segment = dijkstra_simple(graph, total_path.path[j], total_path.path[j + 1]);
-                    if (segment.possible)
-                        total_path.cost += segment.cost;
+                    const Edge *e = graph.getEdge(eid);
+                    if (!e || e->is_deleted)
+                        continue;
+
+                    int v = (e->u == a) ? e->v : e->u;
+                    if (v != b)
+                        continue;
+
+                    if (e->oneway && e->u != a)
+                        continue;
+
+                    best = std::min(best, e->length);
                 }
 
-                candidates.push({total_path.cost, total_path});
-                seen_paths.insert(total_path.path);
+                if (best >= 1e99)
+                {
+                    root_cost = 1e100;
+                    break;
+                }
+
+                root_cost += best;
             }
+
+            total_path.cost = root_cost + spur_path.cost;
+
+            candidates.push({total_path.cost, total_path});
+            seen_paths.insert(total_path.path);
         }
 
         if (candidates.empty())
             break;
 
-        PathResult next = candidates.top().second;
+        results.push_back(candidates.top().second);
         candidates.pop();
-        results.push_back(next);
     }
+
     return results;
 }
 
-std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(const Graph &graph, int source, int target, int k, int overlap_threshold)
+std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
+    const Graph &graph, int source, int target, int k, int overlap_threshold)
 {
-    std::vector<PathResult> results;
+    int CAND_LIMIT = std::min(80, k * 20);
+    auto candidates = k_shortest_paths(graph, source, target, CAND_LIMIT);
 
-    auto candidates = k_shortest_paths(graph, source, target, std::min(50, k * 10));
     if (candidates.empty())
-        return results;
+        return {};
 
-    results.push_back(candidates[0]);
+    if (candidates.size() < (size_t)k)
+        return candidates;
 
-    while (results.size() < k && results.size() < candidates.size())
+    int n = candidates.size();
+
+    std::vector<std::vector<double>> overlap(n, std::vector<double>(n, 0.0));
+    for (int i = 0; i < n; i++)
     {
-        double best_penalty = INF;
-        int best_idx = -1;
-
-        for (size_t i = 1; i < candidates.size(); i++)
+        for (int j = 0; j < n; j++)
         {
-            bool already_selected = false;
-            for (const auto &r : results)
-            {
-                if (r.path == candidates[i].path)
-                {
-                    already_selected = true;
-                    break;
-                }
-            }
-            if (already_selected)
+            if (i == j)
                 continue;
+            overlap[i][j] = OverlappingEdgePercent(candidates[i].path, candidates[j].path);
+        }
+    }
 
-            int overlap_penalty = 0;
-            for (const auto &selected : results)
+    double shortest_cost = candidates[0].cost;
+    std::vector<double> dist_penalty(n);
+    for (int i = 0; i < n; i++)
+    {
+        dist_penalty[i] = (candidates[i].cost - shortest_cost) / shortest_cost + 0.1;
+    }
+
+    const int BEAM_SIZE = 20;
+    using State = std::vector<int>;
+
+    std::vector<State> beam = {{0}};
+
+    auto compute_penalty = [&](const State &S)
+    {
+        double tot = 0;
+        for (int idx_a : S)
+        {
+            double overlap_count = 0;
+            for (int idx_b : S)
             {
-                double overlap_pct = calculate_edge_overlap_percent(selected.path, candidates[i].path);
-                if (overlap_pct > overlap_threshold)
+                if (idx_a == idx_b)
+                    continue;
+                if (overlap[idx_a][idx_b] > overlap_threshold)
                 {
-                    overlap_penalty++;
+                    overlap_count++;
                 }
             }
+            tot += overlap_count * dist_penalty[idx_a];
+        }
+        return tot;
+    };
 
-            double distance_penalty = (candidates[i].cost - candidates[0].cost) / candidates[0].cost / 100.0 + 0.1;
-            double total_penalty = overlap_penalty * distance_penalty;
+    for (int step = 2; step <= k; step++)
+    {
+        std::vector<std::pair<double, State>> next_beam;
 
-            if (total_penalty < best_penalty)
+        for (const auto &partial : beam)
+        {
+            int last_idx = partial.back();
+
+            for (int i = last_idx + 1; i < n; i++)
             {
-                best_penalty = total_penalty;
-                best_idx = i;
+                State newset = partial;
+                newset.push_back(i);
+
+                double p = compute_penalty(newset);
+                next_beam.push_back({p, newset});
             }
         }
 
-        if (best_idx == -1)
+        if (next_beam.empty())
             break;
-        results.push_back(candidates[best_idx]);
+
+        std::sort(next_beam.begin(), next_beam.end(),
+                  [](const auto &a, const auto &b)
+                  { return a.first < b.first; });
+
+        if ((int)next_beam.size() > BEAM_SIZE)
+            next_beam.resize(BEAM_SIZE);
+
+        beam.clear();
+        for (auto &x : next_beam)
+            beam.push_back(x.second);
     }
+
+    State best_state = beam[0];
+
+    double best_val = compute_penalty(best_state);
+    for (auto &s : beam)
+    {
+        double val = compute_penalty(s);
+        if (val < best_val)
+        {
+            best_val = val;
+            best_state = s;
+        }
+    }
+
+    std::vector<PathResult> results;
+    for (int idx : best_state)
+        results.push_back(candidates[idx]);
 
     return results;
 }
 
-double AlgorithmsPhase2::euclidean_heuristic(const Graph &graph, int from, int to)
+double AlgorithmsPhase2::euclideanHeuristic(const Graph &graph, int from, int to)
 {
     const Node *n1 = graph.getNode(from);
     const Node *n2 = graph.getNode(to);
@@ -348,15 +416,13 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
     if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
-    std::unordered_map<int, double> g_score; // Actual cost from source
-    std::unordered_map<int, double> f_score; // g_score + heuristic
-    std::unordered_map<int, int> parent;
-
-    using PQElement = std::pair<double, int>;
-    std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
+    std::unordered_map<int, double> g_score;
+    std::unordered_map<int, double> f_score;
+    
+    std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     g_score[source] = 0;
-    f_score[source] = heuristic_weight * euclidean_heuristic(graph, source, target);
+    f_score[source] = heuristic_weight * euclideanHeuristic(graph, source, target);
     pq.push({f_score[source], source});
 
     while (!pq.empty())
@@ -371,16 +437,6 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
         {
             result.possible = true;
             result.cost = g_score[u];
-            std::vector<int> path;
-            int curr = target;
-            while (parent.count(curr))
-            {
-                path.push_back(curr);
-                curr = parent[curr];
-            }
-            path.push_back(source);
-            std::reverse(path.begin(), path.end());
-            result.path = path;
             return result;
         }
 
@@ -398,9 +454,8 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
 
             if (!g_score.count(v) || tentative_g < g_score[v])
             {
-                parent[v] = u;
                 g_score[v] = tentative_g;
-                f_score[v] = g_score[v] + heuristic_weight * euclidean_heuristic(graph, v, target);
+                f_score[v] = g_score[v] + heuristic_weight * euclideanHeuristic(graph, v, target);
                 pq.push({f_score[v], v});
             }
         }
@@ -408,7 +463,7 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
     return result;
 }
 
-std::vector<std::pair<int, int>> AlgorithmsPhase2::approximate_shortest_paths(
+std::vector<ApproxResult> AlgorithmsPhase2::approximate_shortest_paths(
     const Graph &graph,
     const std::vector<std::pair<int, int>> &queries,
     double time_budget_ms,
@@ -416,29 +471,29 @@ std::vector<std::pair<int, int>> AlgorithmsPhase2::approximate_shortest_paths(
 {
 
     auto start_time = std::chrono::high_resolution_clock::now();
-    std::vector<std::pair<int, int>> results;
+    std::vector<ApproxResult> results;
 
-    // Use A* with moderate heuristic weight for speed
-    double heuristic_weight = 1.0; // Can tune: higher = faster but less accurate
+    double heuristic_weight = 1.0 + (acceptable_error_pct / 100.0) * 4.0;
+    if (heuristic_weight < 1.25)
+        heuristic_weight = 1.25;
 
     for (const auto &[source, target] : queries)
     {
         auto current_time = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        auto elapsed = std::chrono::duration<double, std::milli>(
                            current_time - start_time)
                            .count();
 
-        // Safety margin: stop at 85% of budget
-        if (elapsed >= time_budget_ms * 0.85)
+        // Safety margin
+        if (elapsed >= time_budget_ms * 0.90)
         {
             break;
         }
 
-        // Use A* for faster computation
         PathResult result = astar(graph, source, target, heuristic_weight);
         if (result.possible)
         {
-            results.push_back({source, target});
+            results.push_back({source, target, result.cost});
         }
     }
 
