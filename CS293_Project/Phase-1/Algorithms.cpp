@@ -3,6 +3,7 @@
 #include <queue>
 #include <algorithm>
 #include <cmath>
+#include <immintrin.h>
 
 std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
 {
@@ -28,7 +29,6 @@ std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double s
         if (!e.speed_profile.empty())
             speed = e.speed_profile[slotIdx];
 
-        // fallback to average time
         if (speed <= 0.0)
         {
             speed = e.length / e.average_time;
@@ -91,9 +91,73 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
             std::reverse(result.path.begin(), result.path.end());
             return result;
         }
-
-        for (int edge_id : graph.getAdjEdges(u))
+        // applying unrolling
+        int i = 0;
+        const auto &adjEdges = graph.getAdjEdges(u);
+        int adjSize = adjEdges.size();
+        for (; i <= adjSize - 4; i += 4)
         {
+            int edge_id = adjEdges[i];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double new_dist = d + e->length;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                parent[v] = u;
+                pq.push({new_dist, v});
+            }
+            int edge_id = adjEdges[i + 1];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double new_dist = d + e->length;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                parent[v] = u;
+                pq.push({new_dist, v});
+            }
+            int edge_id = adjEdges[i + 2];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double new_dist = d + e->length;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                parent[v] = u;
+                pq.push({new_dist, v});
+            }
+            int edge_id = adjEdges[i + 3];
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
                 continue;
@@ -114,11 +178,36 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
                 pq.push({new_dist, v});
             }
         }
+        // handle remaining edges
+        for (; i < adjSize; i++)
+        {
+            int edge_id = adjEdges[i];
+            {
+                const Edge *e = graph.getEdge(edge_id);
+                if (!e || e->is_deleted)
+                    continue;
+                if (constraints.is_road_type_forbidden(e->road_type))
+                    continue;
+
+                int v = (e->u == u) ? e->v : e->u;
+                if (e->oneway && e->u != u)
+                    continue;
+                if (constraints.is_node_forbidden(v))
+                    continue;
+
+                double new_dist = d + e->length;
+                if (!dist.count(v) || new_dist < dist[v])
+                {
+                    dist[v] = new_dist;
+                    parent[v] = u;
+                    pq.push({new_dist, v});
+                }
+            }
+        }
+
+        return result;
     }
-
-    return result;
 }
-
 PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int target, const Constraints &constraints)
 {
     PathResult result;
@@ -159,9 +248,104 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
             std::reverse(result.path.begin(), result.path.end());
             return result;
         }
+        int i = 0;
+        const auto &adjEdges = graph.getAdjEdges(u);
+        int adjSize = adjEdges.size();
 
-        for (int edge_id : graph.getAdjEdges(u))
+        for (; i <= adjSize - 4; i += 4)
         {
+            int edge_id = adjEdges[i];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double arrival_time = curr_time + edge_time;
+
+            if (!best_time.count(v) || arrival_time < best_time[v])
+            {
+                best_time[v] = arrival_time;
+                parent[v] = u;
+                pq.push({arrival_time, v});
+            }
+            int edge_id = adjEdges[i + 1];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double arrival_time = curr_time + edge_time;
+
+            if (!best_time.count(v) || arrival_time < best_time[v])
+            {
+                best_time[v] = arrival_time;
+                parent[v] = u;
+                pq.push({arrival_time, v});
+            }
+            int edge_id = adjEdges[i + 2];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double arrival_time = curr_time + edge_time;
+
+            if (!best_time.count(v) || arrival_time < best_time[v])
+            {
+                best_time[v] = arrival_time;
+                parent[v] = u;
+                pq.push({arrival_time, v});
+            }
+            int edge_id = adjEdges[i + 3];
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double arrival_time = curr_time + edge_time;
+
+            if (!best_time.count(v) || arrival_time < best_time[v])
+            {
+                best_time[v] = arrival_time;
+                parent[v] = u;
+                pq.push({arrival_time, v});
+            }
+        }
+        for (; i < adjSize; i++)
+        {
+            int edge_id = adjEdges[i];
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
                 continue;

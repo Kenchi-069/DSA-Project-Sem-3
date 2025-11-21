@@ -1,0 +1,85 @@
+{
+  "meta": {
+    "id": "small_test_queries"
+  },
+  "events": [
+    {
+      "type": "shortest_path",
+      "id": 1,
+      "source": 1,
+      "target": 5,
+      "mode": "distance"
+    },
+    {
+      "type": "shortest_path",
+      "id": 2,
+      "source": 2,
+      "target": 4,
+      "mode": "distance",
+      "constraints": {
+        "forbidden_nodes": [3],
+        "forbidden_road_types": []
+      }
+    },
+    {
+      "type": "shortest_path",
+      "id": 3,
+      "source": 3,
+      "target": 1,
+      "mode": "time"
+    },
+    {
+      "type": "knn",
+      "id": 4,
+      "poi": "atm",
+      "query_point": {
+        "lat": 19.005,
+        "lon": 72.805
+      },
+      "k": 2,
+      "metric": "shortest_path"
+    },
+    {
+      "type": "knn",
+      "id": 5,
+      "poi": "pharmacy",
+      "query_point": {
+        "lat": 19.015,
+        "lon": 72.815
+      },
+      "k": 2,
+      "metric": "euclidean"
+    },
+    {
+      "id": 6,
+      "type": "modify_edge",
+      "edge_id": 1,
+      "patch": {
+        "length": 80.0
+      }
+    },
+    {
+      "id": 7,
+      "type": "remove_edge",
+      "edge_id": 2
+    },
+    {
+      "id": 8,
+      "type": "remove_edge",
+      "edge_id": 5
+    },
+    {
+      "id": 9,
+      "type": "modify_edge",
+      "edge_id": 3,
+      "patch": {
+        "length": 170.0
+      }
+    },
+    {
+      "id": 10,
+      "type": "remove_edge",
+      "edge_id": 7
+    }
+  ]
+}
