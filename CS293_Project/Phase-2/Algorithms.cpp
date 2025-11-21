@@ -417,7 +417,7 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
 
     std::unordered_map<int, double> g_score;
     std::unordered_map<int, double> f_score;
-    
+
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     g_score[source] = 0;

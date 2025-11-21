@@ -390,9 +390,100 @@ std::unordered_map<int, double> Algorithms::dijkstraAllDist(const Graph &graph, 
         pq.pop();
         if (dist.count(u) && d > dist[u])
             continue;
-
-        for (int edge_id : graph.getAdjEdges(u))
+        int i = 0;
+        const auto &adjEdges = graph.getAdjEdges(u);
+        int adjSize = adjEdges.size();
+        for (; i <= adjSize - 4; i += 4)
         {
+            int edge_id = adjEdges[i];
+
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double edge_cost = use_time ? e->average_time : e->length;
+            double new_dist = d + edge_cost;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                pq.push({new_dist, v});
+            }
+            int edge_id = adjEdges[i + 1];
+
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double edge_cost = use_time ? e->average_time : e->length;
+            double new_dist = d + edge_cost;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                pq.push({new_dist, v});
+            }
+            int edge_id = adjEdges[i + 2];
+
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double edge_cost = use_time ? e->average_time : e->length;
+            double new_dist = d + edge_cost;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                pq.push({new_dist, v});
+            }
+            int edge_id = adjEdges[i + 3];
+
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+            if (constraints.is_road_type_forbidden(e->road_type))
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+            if (constraints.is_node_forbidden(v))
+                continue;
+
+            double edge_cost = use_time ? e->average_time : e->length;
+            double new_dist = d + edge_cost;
+            if (!dist.count(v) || new_dist < dist[v])
+            {
+                dist[v] = new_dist;
+                pq.push({new_dist, v});
+            }
+        }
+        for (; i < adjSize; i++)
+        {
+            int edge_id = adjEdges[i];
+
             const Edge *e = graph.getEdge(edge_id);
             if (!e || e->is_deleted)
                 continue;
@@ -422,9 +513,42 @@ std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat,
 {
     std::vector<int> poi_nodes = graph.getNodesPOI(poi);
     std::vector<std::pair<double, int>> distances;
-
-    for (int node_id : poi_nodes)
+    int i = 0;
+    int poiSize = poi_nodes.size();
+    for (; i <= poiSize - 4; i += 4)
     {
+        int node_id = poi_nodes[i];
+        const Node *n = graph.getNode(node_id);
+        if (n)
+        {
+            double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
+            distances.push_back({dist, node_id});
+        }
+        int node_id = poi_nodes[i + 1];
+        const Node *n = graph.getNode(node_id);
+        if (n)
+        {
+            double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
+            distances.push_back({dist, node_id});
+        }
+        int node_id = poi_nodes[i + 2];
+        const Node *n = graph.getNode(node_id);
+        if (n)
+        {
+            double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
+            distances.push_back({dist, node_id});
+        }
+        int node_id = poi_nodes[i + 3];
+        const Node *n = graph.getNode(node_id);
+        if (n)
+        {
+            double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
+            distances.push_back({dist, node_id});
+        }
+    }
+    for (; i < poiSize; i++)
+    {
+        int node_id = poi_nodes[i];
         const Node *n = graph.getNode(node_id);
         if (!n)
             continue;
@@ -434,7 +558,17 @@ std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat,
     std::sort(distances.begin(), distances.end());
 
     std::vector<int> result;
-    for (int i = 0; i < std::min(k, (int)distances.size()); i++)
+    // applying unrolling
+    int i = 0;
+    int temp = std::min(k, (int)distances.size());
+    for (; i <= temp - 4; i += 4)
+    {
+        result.push_back(distances[i].second);
+        result.push_back(distances[i + 1].second);
+        result.push_back(distances[i + 2].second);
+        result.push_back(distances[i + 3].second);
+    }
+    for (; i < temp; i++)
     {
         result.push_back(distances[i].second);
     }
@@ -451,8 +585,35 @@ std::vector<int> Algorithms::knn_shortest_path(const Graph &graph, double query_
     auto distances = dijkstraAllDist(graph, query_node, false);
 
     std::vector<std::pair<double, int>> sorted_distances;
-    for (int node_id : poi_nodes)
+    int i = 0;
+    // applying unrolling
+    int poiSize = poi_nodes.size();
+    for (; i <= poiSize - 4; i += 4)
     {
+        int node_id = poi_nodes[i];
+        if (distances.count(node_id) && distances[node_id] < INF)
+        {
+            sorted_distances.push_back({distances[node_id], node_id});
+        }
+        int node_id = poi_nodes[i + 1];
+        if (distances.count(node_id) && distances[node_id] < INF)
+        {
+            sorted_distances.push_back({distances[node_id], node_id});
+        }
+        int node_id = poi_nodes[i + 2];
+        if (distances.count(node_id) && distances[node_id] < INF)
+        {
+            sorted_distances.push_back({distances[node_id], node_id});
+        }
+        int node_id = poi_nodes[i + 3];
+        if (distances.count(node_id) && distances[node_id] < INF)
+        {
+            sorted_distances.push_back({distances[node_id], node_id});
+        }
+    }
+    for (; i < poiSize; i++)
+    {
+        int node_id = poi_nodes[i];
         if (distances.count(node_id) && distances[node_id] < INF)
         {
             sorted_distances.push_back({distances[node_id], node_id});
@@ -461,7 +622,17 @@ std::vector<int> Algorithms::knn_shortest_path(const Graph &graph, double query_
     std::sort(sorted_distances.begin(), sorted_distances.end());
 
     std::vector<int> result;
-    for (int i = 0; i < std::min(k, (int)sorted_distances.size()); i++)
+    int i = 0;
+    int temp = std::min(k, (int)sorted_distances.size());
+    for (; i <= temp - 4; i += 4)
+    {
+        result.push_back(sorted_distances[i].second);
+        result.push_back(sorted_distances[i + 1].second);
+        result.push_back(sorted_distances[i + 2].second);
+        result.push_back(sorted_distances[i + 3].second);
+    }
+
+    for (; i < std::min(k, (int)sorted_distances.size()); i++)
     {
         result.push_back(sorted_distances[i].second);
     }
