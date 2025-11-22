@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
 
         auto t1 = std::chrono::high_resolution_clock::now();
         Graph graph = JsonParserPhase3::parseGraph(graph_file);
+        std::cout << "Graph Loaded" << std::endl;
         auto t2 = std::chrono::high_resolution_clock::now();
         std::cout << "Graph Loaded in "
                   << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " ms" << std::endl;
