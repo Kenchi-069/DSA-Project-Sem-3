@@ -1,17 +1,16 @@
-=== Phase-1\Algorithms.cpp ===
+=== Phase-1/Algorithms.cpp ===
 #include "Algorithms.hpp"
 #include "Graph.hpp"
 #include <queue>
 #include <algorithm>
 #include <cmath>
 
-std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
+double Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
 {
-    // startTime: absolute seconds since t=0
     double remDistance = e.length;
     double totalTime = 0.0;
 
-    double timeSpentInSlot = std::fmod(startTime, 900.0); // Time in seconds within the current 15-min slot
+    double timeSpentInSlot = std::fmod(startTime, 900.0);
     if (timeSpentInSlot < 0.0)
         timeSpentInSlot += 900.0;
 
@@ -19,7 +18,7 @@ std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double s
     bool firstSegment = true;
     double absoluteSegmentStartTime = startTime;
 
-    while (remDistance > 1e-9) // floating point tolerance
+    while (remDistance > 1e-9)
     {
         int slotIdx = static_cast<int>(std::floor(absoluteSegmentStartTime / 900.0)) % 96;
         if (slotIdx < 0)
@@ -29,7 +28,6 @@ std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double s
         if (!e.speed_profile.empty())
             speed = e.speed_profile[slotIdx];
 
-        // fallback to average time
         if (speed <= 0.0)
         {
             speed = e.length / e.average_time;
@@ -53,12 +51,7 @@ std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double s
         }
     }
 
-    double arrivalTime = startTime + totalTime;
-    int arrivalSlot = static_cast<int>(std::floor(arrivalTime / 900.0)) % 96;
-    if (arrivalSlot < 0)
-        arrivalSlot += 96;
-
-    return {totalTime, arrivalSlot};
+    return totalTime;
 }
 
 PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, int target, const Constraints &constraints)
@@ -67,8 +60,9 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
     if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
-    std::unordered_map<int, double> dist;
-    std::unordered_map<int, int> parent;
+    int n = graph.getNodeCount();
+    std::vector<double> dist(n, INF);
+    std::vector<int> parent(n, -1);
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     dist[source] = 0.0;
@@ -79,7 +73,7 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
         auto [d, u] = pq.top();
         pq.pop();
 
-        if (dist.count(u) && d > dist[u])
+        if (d > dist[u])
             continue;
 
         if (u == target)
@@ -108,7 +102,7 @@ PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, in
                 continue;
 
             double new_dist = d + e->length;
-            if (!dist.count(v) || new_dist < dist[v])
+            if (new_dist < dist[v])
             {
                 dist[v] = new_dist;
                 parent[v] = u;
@@ -133,8 +127,9 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
         bool operator>(const State &o) const { return time > o.time; }
     };
 
-    std::unordered_map<int, double> best_time;
-    std::unordered_map<int, int> parent;
+    int n = graph.getNodeCount();
+    std::vector<double> best_time(n, INF);
+    std::vector<int> parent(n, -1);
     std::priority_queue<State, std::vector<State>, std::greater<State>> pq;
 
     best_time[source] = 0.0;
@@ -147,7 +142,7 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
         double curr_time = st.time;
         int u = st.node;
 
-        if (best_time.count(u) && curr_time > best_time[u])
+        if (curr_time > best_time[u])
             continue;
 
         if (u == target)
@@ -175,10 +170,10 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
             if (constraints.is_node_forbidden(v))
                 continue;
 
-            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double edge_time = computeEdgeTravelTime(*e, curr_time);
             double arrival_time = curr_time + edge_time;
 
-            if (!best_time.count(v) || arrival_time < best_time[v])
+            if (arrival_time < best_time[v])
             {
                 best_time[v] = arrival_time;
                 parent[v] = u;
@@ -192,10 +187,12 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
 
 std::unordered_map<int, double> Algorithms::dijkstraAllDist(const Graph &graph, int source, bool use_time, const Constraints &constraints)
 {
-    std::unordered_map<int, double> dist;
+    std::unordered_map<int, double> dist_map;
     if (!graph.hasNode(source))
-        return dist;
+        return dist_map;
 
+    int n = graph.getNodeCount();
+    std::vector<double> dist(n, INF);
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     dist[source] = 0.0;
@@ -205,7 +202,7 @@ std::unordered_map<int, double> Algorithms::dijkstraAllDist(const Graph &graph, 
     {
         auto [d, u] = pq.top();
         pq.pop();
-        if (dist.count(u) && d > dist[u])
+        if (d > dist[u])
             continue;
 
         for (int edge_id : graph.getAdjEdges(u))
@@ -224,7 +221,7 @@ std::unordered_map<int, double> Algorithms::dijkstraAllDist(const Graph &graph, 
 
             double edge_cost = use_time ? e->average_time : e->length;
             double new_dist = d + edge_cost;
-            if (!dist.count(v) || new_dist < dist[v])
+            if (new_dist < dist[v])
             {
                 dist[v] = new_dist;
                 pq.push({new_dist, v});
@@ -232,13 +229,19 @@ std::unordered_map<int, double> Algorithms::dijkstraAllDist(const Graph &graph, 
         }
     }
 
-    return dist;
+    // Convert to map for return
+    for (int i = 0; i < n; ++i)
+    {
+        if (dist[i] < INF)
+            dist_map[i] = dist[i];
+    }
+    return dist_map;
 }
 
 std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k)
 {
     std::vector<int> poi_nodes = graph.getNodesPOI(poi);
-    std::vector<std::pair<double, int>> distances;
+    std::priority_queue<std::pair<double, int>> pq;
 
     for (int node_id : poi_nodes)
     {
@@ -246,15 +249,24 @@ std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat,
         if (!n)
             continue;
         double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
-        distances.push_back({dist, node_id});
+        if ((int)pq.size() < k)
+        {
+            pq.push({dist, node_id});
+        }
+        else if (dist < pq.top().first)
+        {
+            pq.pop();
+            pq.push({dist, node_id});
+        }
     }
-    std::sort(distances.begin(), distances.end());
 
     std::vector<int> result;
-    for (int i = 0; i < std::min(k, (int)distances.size()); i++)
+    while (!pq.empty())
     {
-        result.push_back(distances[i].second);
+        result.push_back(pq.top().second);
+        pq.pop();
     }
+    std::reverse(result.begin(), result.end());
     return result;
 }
 
@@ -285,8 +297,7 @@ std::vector<int> Algorithms::knn_shortest_path(const Graph &graph, double query_
     return result;
 }
 
-
-=== Phase-1\Algorithms.hpp ===
+=== Phase-1/Algorithms.hpp ===
 #ifndef ALGORITHMS_HPP
 #define ALGORITHMS_HPP
 
@@ -328,14 +339,14 @@ public:
     static std::vector<int> knn_shortest_path(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k);
 
 private:
-    static std::pair<double, int> computeEdgeTravelTime(const Edge &e, double start_time);
+    static double computeEdgeTravelTime(const Edge &e, double start_time);
     static std::unordered_map<int, double> dijkstraAllDist(const Graph &graph, int source, bool use_time, const Constraints &constraints = Constraints());
 };
 
 #endif
 
 
-=== Phase-1\Graph.cpp ===
+=== Phase-1/Graph.cpp ===
 #include "Graph.hpp"
 #include <algorithm>
 #include <iostream>
@@ -344,8 +355,10 @@ private:
 
 void Graph::addNode(const Node &node)
 {
+    if (node.id < 0 || node.id >= MAX_NODES) return;
+    
     nodes[node.id] = node;
-    adjacency_list[node.id] = std::vector<int>();
+    max_node_id = std::max(max_node_id, node.id);
 
     for (const auto &poi : node.pois)
     {
@@ -358,6 +371,8 @@ void Graph::addNode(const Node &node)
 
 void Graph::addEdge(const Edge &edge)
 {
+    if (edge.id < 0 || edge.id >= MAX_EDGES) return;
+    
     Edge e = edge;
     e.original_length = edge.length;
     e.original_average_time = edge.average_time;
@@ -365,6 +380,8 @@ void Graph::addEdge(const Edge &edge)
     e.original_road_type = edge.road_type;
 
     edges[e.id] = e;
+    max_edge_id = std::max(max_edge_id, e.id);
+    
     adjacency_list[e.u].push_back(e.id);
     if (!e.oneway)
     {
@@ -374,46 +391,50 @@ void Graph::addEdge(const Edge &edge)
 
 const Node *Graph::getNode(int node_id) const
 {
-    auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    if (node_id < 0 || node_id >= MAX_NODES)
+        return nullptr;
+    if (nodes[node_id].id == -1)
+        return nullptr;
+    return &nodes[node_id];
 }
 
 const Edge *Graph::getEdge(int edge_id) const
 {
-    auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    if (edge_id < 0 || edge_id >= MAX_EDGES)
+        return nullptr;
+    if (edges[edge_id].id == -1)
+        return nullptr;
+    return &edges[edge_id];
 }
 
 bool Graph::hasNode(int node_id) const
 {
-    return nodes.find(node_id) != nodes.end();
+    return node_id >= 0 && node_id < MAX_NODES && nodes[node_id].id != -1;
 }
 
 bool Graph::hasEdge(int edge_id) const
 {
-    return edges.find(edge_id) != edges.end();
+    return edge_id >= 0 && edge_id < MAX_EDGES && edges[edge_id].id != -1;
 }
 
 bool Graph::removeEdge(int edge_id)
 {
-    auto it = edges.find(edge_id);
-    if (it != edges.end())
-    {
-        if (it->second.is_deleted)
-            return false;
-        it->second.is_deleted = true;
-        return true;
-    }
-    return false;
+    if (!hasEdge(edge_id))
+        return false;
+    
+    if (edges[edge_id].is_deleted)
+        return false;
+    
+    edges[edge_id].is_deleted = true;
+    return true;
 }
 
 bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 {
-    auto it = edges.find(edge_id);
-    if (it == edges.end())
+    if (!hasEdge(edge_id))
         return false;
 
-    Edge &e = it->second;
+    Edge &e = edges[edge_id];
     if (e.is_deleted)
     {
         if (!has_patch_data)
@@ -455,9 +476,10 @@ bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 
 const std::vector<int> &Graph::getAdjEdges(int node_id) const
 {
-    static const std::vector<int> empty; // Return type is reference need to declare empty
-    auto it = adjacency_list.find(node_id);
-    return (it != adjacency_list.end()) ? it->second : empty;
+    static const std::vector<int> empty;
+    if (node_id < 0 || node_id >= MAX_NODES)
+        return empty;
+    return adjacency_list[node_id];
 }
 
 std::vector<int> Graph::getNodesPOI(const std::string &poi) const
@@ -524,8 +546,10 @@ int Graph::findNearestNode(double lat, double lon) const
 {
     int nearest = -1;
     double min_dist = INF;
-    for (const auto &[id, node] : nodes)
+    for (int id = 0; id <= max_node_id; ++id)
     {
+        if (nodes[id].id == -1) continue;
+        const Node &node = nodes[id];
         double dist = EuDistance(lat, lon, node.lat, node.lon);
         if (dist < min_dist)
         {
@@ -536,8 +560,7 @@ int Graph::findNearestNode(double lat, double lon) const
     return nearest;
 }
 
-
-=== Phase-1\Graph.hpp ===
+=== Phase-1/Graph.hpp ===
 #ifndef GRAPH_HPP
 #define GRAPH_HPP
 
@@ -589,13 +612,23 @@ struct Edge
 class Graph
 {
 private:
-    std::unordered_map<int, Node> nodes;
-    std::unordered_map<int, Edge> edges;
-    std::unordered_map<int, std::vector<int>> adjacency_list;
+    static constexpr int MAX_NODES = 100000;
+    static constexpr int MAX_EDGES = 100000;
+
+    std::vector<Node> nodes;
+    std::vector<Edge> edges;
+    std::vector<std::vector<int>> adjacency_list;
     std::unordered_map<std::string, std::vector<int>> poi_index;
+    int max_node_id;
+    int max_edge_id;
 
 public:
-    Graph() {}
+    Graph() : max_node_id(-1), max_edge_id(-1)
+    {
+        nodes.resize(MAX_NODES);
+        edges.resize(MAX_EDGES);
+        adjacency_list.resize(MAX_NODES);
+    }
 
     void addNode(const Node &node);
     void addEdge(const Edge &edge);
@@ -615,17 +648,16 @@ public:
     double EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact = false) const;
     double edgeTimeinSlot(int edge_id, int time_slot) const;
 
-    const std::unordered_map<int, Node> &getNodes() const { return nodes; }
-    const std::unordered_map<int, Edge> &getEdges() const { return edges; }
-    int getNodeCount() const { return nodes.size(); }
+    const std::vector<Node> &getNodes() const { return nodes; }
+    const std::vector<Edge> &getEdges() const { return edges; }
+    int getNodeCount() const { return max_node_id + 1; }
 
     int findNearestNode(double lat, double lon) const;
 };
 
 #endif
 
-
-=== Phase-1\JsonParser.cpp ===
+=== Phase-1/JsonParser.cpp ===
 #include "JsonParser.hpp"
 #include <iostream>
 
@@ -708,7 +740,7 @@ void JsonParser::writeOutput(const std::string &filename, const json &output)
 }
 
 
-=== Phase-1\JsonParser.hpp ===
+=== Phase-1/JsonParser.hpp ===
 #ifndef JSON_PARSER_HPP
 #define JSON_PARSER_HPP
 
@@ -735,7 +767,7 @@ private:
 #endif
 
 
-=== Phase-1\QueryHandler.cpp ===
+=== Phase-1/QueryHandler.cpp ===
 #include "QueryHandler.hpp"
 #include <chrono>
 #include <iostream>
@@ -775,7 +807,7 @@ json QueryHandler::processQueries(const json &queries_json)
             }
 
             auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+            auto duration = std::chrono::duration<double, std::milli>(end - start);
             result["processing_time"] = duration.count();
         }
         catch (...)
@@ -880,14 +912,7 @@ json QueryHandler::handleShortestPath(const json &query)
     result["possible"] = path.possible;
     if (path.possible)
     {
-        if (mode == "time")
-        {
-            result["minimum_time"] = path.cost;
-        }
-        else
-        {
-            result["minimum_distance"] = path.cost;
-        }
+        result["minimum_time/minimum_distance"] = path.cost;
         result["path"] = path.path;
     }
     return result;
@@ -917,7 +942,7 @@ json QueryHandler::handleKNN(const json &query)
 }
 
 
-=== Phase-1\QueryHandler.hpp ===
+=== Phase-1/QueryHandler.hpp ===
 #ifndef QUERY_HANDLER_HPP
 #define QUERY_HANDLER_HPP
 
@@ -945,7 +970,7 @@ private:
 #endif
 
 
-=== Phase-1\SampleDriver.cpp ===
+=== Phase-1/SampleDriver.cpp ===
 #include "Graph.hpp"
 #include "Algorithms.hpp"
 #include "JsonParser.hpp"
@@ -958,6 +983,7 @@ int main(int argc, char *argv[])
     if (argc != 4)
     {
         std::cout << "Usage: " << argv[0] << " <graph.json> <queries.json> <output.json>" << std::endl;
+        return 1;
     }
 
     std::string graph_file = argv[1];
@@ -969,8 +995,8 @@ int main(int argc, char *argv[])
         std::cout << "Phase 1" << std::endl;
         std::cout << "Loading Graph" << std::endl;
         Graph graph = JsonParser::parseGraph(graph_file);
-        std::cout << "Graph Loaded: " << graph.getNodes().size() << " nodes, "
-                  << graph.getEdges().size() << " edges" << std::endl;
+
+        std::cout << "Graph Loaded: " << graph.getNodeCount() << " nodes" << std::endl;
 
         std::cout << "Loading Queries" << std::endl;
         json queries = JsonParser::parseQueries(queries_file);
@@ -989,8 +1015,7 @@ int main(int argc, char *argv[])
     }
 }
 
-
-=== Phase-2\Algorithms.cpp ===
+=== Phase-2/Algorithms.cpp ===
 #include "Algorithms.hpp"
 #include <queue>
 #include <algorithm>
@@ -1043,8 +1068,9 @@ PathResult AlgorithmsPhase2::dijkstraSimple(const Graph &graph, int source, int 
     if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
-    std::unordered_map<int, double> dist;
-    std::unordered_map<int, int> parent;
+    int n = graph.getNodeCount();
+    std::vector<double> dist(n, INF);
+    std::vector<int> parent(n, -1);
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     dist[source] = 0;
@@ -1055,7 +1081,7 @@ PathResult AlgorithmsPhase2::dijkstraSimple(const Graph &graph, int source, int 
         auto [d, u] = pq.top();
         pq.pop();
 
-        if (dist.count(u) && d > dist[u])
+        if (d > dist[u])
             continue;
 
         if (u == target)
@@ -1080,7 +1106,7 @@ PathResult AlgorithmsPhase2::dijkstraSimple(const Graph &graph, int source, int 
                 continue;
 
             double new_dist = d + e->length;
-            if (!dist.count(v) || new_dist < dist[v])
+            if (new_dist < dist[v])
             {
                 dist[v] = new_dist;
                 parent[v] = u;
@@ -1092,87 +1118,100 @@ PathResult AlgorithmsPhase2::dijkstraSimple(const Graph &graph, int source, int 
     return result;
 }
 
-// Dijkstra with constraints for Yen's algorithm
-PathResult AlgorithmsPhase2::dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges, const std::unordered_set<int> &forbidden_nodes)
+PathResult AlgorithmsPhase2::dijkstraFast(int n, const std::vector<std::vector<FastEdge>> &adj, int source, int target, std::vector<double> &dist, std::vector<int> &parent, const std::vector<bool> &node_blocked, const std::vector<bool> &edge_blocked)
 {
     PathResult result;
-    if (!graph.hasNode(source) || !graph.hasNode(target))
-        return result;
-    if (forbidden_nodes.count(source))
-        return result;
 
-    std::unordered_map<int, double> dist;
-    std::unordered_map<int, int> parent;
-    std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
+    if (node_blocked[source] || node_blocked[target])
+    {
+        result.possible = false;
+        return result;
+    }
 
     dist[source] = 0;
-    pq.push({0, source});
+
+    using State = std::pair<double, int>;
+    std::priority_queue<State, std::vector<State>, std::greater<State>> pq;
+    pq.push({0.0, source});
 
     while (!pq.empty())
     {
         auto [d, u] = pq.top();
         pq.pop();
-        if (dist.count(u) && d > dist[u])
-            continue;
-        if (forbidden_nodes.count(u))
+
+        if (d > dist[u])
             continue;
         if (u == target)
+            break;
+
+        for (const auto &edge : adj[u])
         {
-            result.possible = true;
-            result.cost = dist[u];
-            std::vector<int> path;
-            int curr = target;
-            while (parent.count(curr))
+            if (edge_blocked[edge.id])
+                continue;
+            if (node_blocked[edge.to])
+                continue;
+
+            double new_dist = dist[u] + edge.weight;
+            if (new_dist < dist[edge.to])
             {
-                path.push_back(curr);
-                curr = parent[curr];
-            }
-            path.push_back(source);
-            std::reverse(path.begin(), path.end());
-            result.path = path;
-            return result;
-        }
-
-        for (int edge_id : graph.getAdjEdges(u))
-        {
-            const Edge *e = graph.getEdge(edge_id);
-            if (!e || e->is_deleted)
-                continue;
-
-            int v = (e->u == u) ? e->v : e->u;
-            if (e->oneway && e->u != u)
-                continue;
-
-            if (forbidden_edges.count({u, v}))
-                continue;
-            if (!e->oneway && forbidden_edges.count({v, u}))
-                continue;
-            if (forbidden_nodes.count(v))
-                continue;
-
-            double edge_cost = e->length;
-            double new_dist = dist[u] + edge_cost;
-            if (!dist.count(v) || new_dist < dist[v])
-            {
-                dist[v] = new_dist;
-                parent[v] = u;
-                pq.push({new_dist, v});
+                dist[edge.to] = new_dist;
+                parent[edge.to] = u;
+                pq.push({new_dist, edge.to});
             }
         }
     }
+
+    if (dist[target] == std::numeric_limits<double>::max())
+    {
+        result.possible = false;
+        return result;
+    }
+
+    result.possible = true;
+    result.cost = dist[target];
+    int curr = target;
+    while (curr != -1)
+    {
+        result.path.push_back(curr);
+        curr = parent[curr];
+    }
+    std::reverse(result.path.begin(), result.path.end());
     return result;
 }
 
-// Yen's K Shortest Paths
-std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(
-    const Graph &graph, int source, int target, int k)
+std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, int source, int target, int k)
 {
     std::vector<PathResult> results;
+    int n = graph.getNodeCount();
 
-    PathResult first = dijkstraSimple(graph, source, target);
-    if (!first.possible || !isSimplePath(first.path))
+    std::vector<std::vector<FastEdge>> adj(n);
+    int max_edge_id = 0;
+
+    const auto &edges = graph.getEdges();
+    for (int eid = 0; eid < (int)edges.size(); ++eid)
+    {
+        const Edge &e = edges[eid];
+        if (e.id == -1 || e.is_deleted)
+            continue;
+
+        adj[e.u].push_back({e.v, e.length, e.id});
+        if (!e.oneway)
+        {
+            adj[e.v].push_back({e.u, e.length, e.id});
+        }
+        max_edge_id = std::max(max_edge_id, e.id);
+    }
+
+    std::vector<double> dist(n);
+    std::vector<int> parent(n);
+    std::vector<bool> node_blocked(n, false);
+    std::vector<bool> edge_blocked(max_edge_id + 1, false);
+
+    resetDijkstraState(dist, parent);
+    PathResult first = dijkstraFast(n, adj, source, target, dist, parent, node_blocked, edge_blocked);
+
+    if (!first.possible)
         return results;
-
     results.push_back(first);
 
     using PathCandidate = std::pair<double, PathResult>;
@@ -1183,95 +1222,75 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(
             return a.first > b.first;
         }
     };
-
-    std::priority_queue<PathCandidate,
-                        std::vector<PathCandidate>,
-                        ComparePathCandidate>
-        candidates;
-
-    std::set<std::vector<int>> seen_paths;
-    seen_paths.insert(first.path);
+    std::priority_queue<PathCandidate, std::vector<PathCandidate>, ComparePathCandidate> candidates;
 
     for (int kth = 1; kth < k; kth++)
     {
-        const auto &prev = results.back();
+        const auto &prev_path = results.back().path;
 
-        for (size_t i = 0; i + 1 < prev.path.size(); i++)
+        for (size_t i = 0; i < prev_path.size() - 1; i++)
         {
-            int spur_node = prev.path[i];
-            std::vector<int> root_path(prev.path.begin(), prev.path.begin() + i + 1);
+            int spur_node = prev_path[i];
+            std::vector<int> root_path(prev_path.begin(), prev_path.begin() + i + 1);
 
-            std::unordered_set<std::pair<int, int>, EdgeHash> forbidden_edges;
-            std::unordered_set<int> forbidden_nodes;
+            double root_path_cost = 0;
 
-            for (const auto &p : results)
+            for (size_t j = 0; j < i; j++)
             {
-                if (p.path.size() > i &&
-                    std::equal(root_path.begin(), root_path.end(), p.path.begin()))
+                node_blocked[root_path[j]] = true;
+                int u = root_path[j];
+                int v = root_path[j + 1];
+                for (auto &e : adj[u])
                 {
-                    forbidden_edges.insert({p.path[i], p.path[i + 1]});
+                    if (e.to == v && !edge_blocked[e.id])
+                    {
+                        root_path_cost += e.weight;
+                        break;
+                    }
                 }
             }
 
-            for (size_t j = 0; j + 1 < root_path.size(); j++)
-                forbidden_nodes.insert(root_path[j]);
-
-            PathResult spur_path = dijkstra(graph, spur_node, target,
-                                            forbidden_edges, forbidden_nodes);
-
-            if (!spur_path.possible)
-                continue;
-
-            PathResult total_path;
-            total_path.possible = true;
-            total_path.path = root_path;
-            total_path.path.insert(total_path.path.end(),
-                                   spur_path.path.begin() + 1,
-                                   spur_path.path.end());
-
-            if (!isSimplePath(total_path.path))
-                continue;
-            if (seen_paths.count(total_path.path))
-                continue;
-
-            double root_cost = 0;
-
-            for (size_t j = 0; j + 1 < root_path.size(); j++)
+            std::vector<int> edges_to_restore;
+            for (const auto &result : results)
             {
-                int a = root_path[j];
-                int b = root_path[j + 1];
-
-                double best = 1e100;
-
-                for (int eid : graph.getAdjEdges(a))
+                const auto &p_path = result.path;
+                if (p_path.size() > i + 1 &&
+                    std::equal(root_path.begin(), root_path.end(), p_path.begin(), p_path.begin() + i + 1))
                 {
-                    const Edge *e = graph.getEdge(eid);
-                    if (!e || e->is_deleted)
-                        continue;
+                    int u = p_path[i];
+                    int v = p_path[i + 1];
 
-                    int v = (e->u == a) ? e->v : e->u;
-                    if (v != b)
-                        continue;
-
-                    if (e->oneway && e->u != a)
-                        continue;
-
-                    best = std::min(best, e->length);
+                    for (const auto &e : adj[u])
+                    {
+                        if (e.to == v)
+                        {
+                            if (!edge_blocked[e.id])
+                            {
+                                edge_blocked[e.id] = true;
+                                edges_to_restore.push_back(e.id);
+                            }
+                        }
+                    }
                 }
-
-                if (best >= 1e99)
-                {
-                    root_cost = 1e100;
-                    break;
-                }
-
-                root_cost += best;
             }
 
-            total_path.cost = root_cost + spur_path.cost;
+            resetDijkstraState(dist, parent);
+            PathResult spur_path = dijkstraFast(n, adj, spur_node, target, dist, parent, node_blocked, edge_blocked);
 
-            candidates.push({total_path.cost, total_path});
-            seen_paths.insert(total_path.path);
+            for (int eid : edges_to_restore)
+                edge_blocked[eid] = false;
+            for (size_t j = 0; j < i; j++)
+                node_blocked[root_path[j]] = false;
+
+            if (spur_path.possible)
+            {
+                PathResult total_path;
+                total_path.path = root_path;
+                total_path.path.insert(total_path.path.end(), spur_path.path.begin() + 1, spur_path.path.end());
+                total_path.cost = root_path_cost + spur_path.cost;
+
+                candidates.push({total_path.cost, total_path});
+            }
         }
 
         if (candidates.empty())
@@ -1285,112 +1304,150 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(
 }
 
 std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
-    const Graph &graph, int source, int target, int k, int overlap_threshold)
+    const Graph &graph, int source, int target,
+    int k, int overlap_threshold)
 {
-    int CAND_LIMIT = std::min(80, k * 20);
-    auto candidates = k_shortest_paths(graph, source, target, CAND_LIMIT);
+    std::vector<PathResult> results;
 
-    if (candidates.empty())
-        return {};
+    PathResult P0 = dijkstraSimple(graph, source, target);
+    if (!P0.possible)
+        return results;
 
-    if (candidates.size() < (size_t)k)
-        return candidates;
+    results.push_back(P0);
 
-    int n = candidates.size();
+    double alpha = std::max(0.12, std::min(0.7, overlap_threshold / 120.0));
+    double expo = 1.7;
+    double neighbor_frac = 0.55;
 
-    std::vector<std::vector<double>> overlap(n, std::vector<double>(n, 0.0));
-    for (int i = 0; i < n; i++)
+    for (int i = 2; i <= k; i++)
     {
-        for (int j = 0; j < n; j++)
+        std::unordered_map<std::pair<int, int>, int, EdgeHash> edge_usage;
+        for (auto &Pj : results)
         {
-            if (i == j)
-                continue;
-            overlap[i][j] = OverlappingEdgePercent(candidates[i].path, candidates[j].path);
-        }
-    }
-
-    double shortest_cost = candidates[0].cost;
-    std::vector<double> dist_penalty(n);
-    for (int i = 0; i < n; i++)
-    {
-        dist_penalty[i] = (candidates[i].cost - shortest_cost) / shortest_cost + 0.1;
-    }
-
-    const int BEAM_SIZE = 20;
-
-    std::vector<std::vector<int>> beam = {{0}};
-
-    auto compute_penalty = [&](const std::vector<int> &S)
-    {
-        double tot = 0;
-        for (int idx_a : S)
-        {
-            double overlap_count = 0;
-            for (int idx_b : S)
+            for (int idx = 0; idx + 1 < (int)Pj.path.size(); idx++)
             {
-                if (idx_a == idx_b)
+                int u = Pj.path[idx], v = Pj.path[idx + 1];
+                edge_usage[{std::min(u, v), std::max(u, v)}] += 1;
+            }
+        }
+
+        std::unordered_map<std::pair<int, int>, double, EdgeHash> penalty;
+        for (auto &kv : edge_usage)
+        {
+            auto key = kv.first;
+            int usage = kv.second;
+            double p = alpha * std::pow(expo, (double)(usage - 1));
+            penalty[key] = p;
+        }
+
+        std::unordered_set<int> path_nodes;
+        for (auto &Pj : results)
+            for (int n : Pj.path)
+                path_nodes.insert(n);
+
+        for (int n : path_nodes)
+        {
+            for (int eid : graph.getAdjEdges(n))
+            {
+                const Edge *e = graph.getEdge(eid);
+                if (!e || e->is_deleted)
                     continue;
-                if (overlap[idx_a][idx_b] > overlap_threshold)
-                {
-                    overlap_count++;
-                }
-            }
-            tot += overlap_count * dist_penalty[idx_a];
-        }
-        return tot;
-    };
 
-    for (int step = 2; step <= k; step++)
-    {
-        std::vector<std::pair<double, std::vector<int>>> next_beam;
-
-        for (const auto &partial : beam)
-        {
-            int last_idx = partial.back();
-
-            for (int i = last_idx + 1; i < n; i++)
-            {
-                std::vector<int> newset = partial;
-                newset.push_back(i);
-
-                double p = compute_penalty(newset);
-                next_beam.push_back({p, newset});
+                int a = std::min(e->u, e->v);
+                int b = std::max(e->u, e->v);
+                penalty[{a, b}] += neighbor_frac * alpha;
             }
         }
 
-        if (next_beam.empty())
+        PathResult Pi = dijkstraPenaltyDual(graph, source, target, penalty);
+        if (!Pi.possible)
             break;
 
-        std::sort(next_beam.begin(), next_beam.end(),
-                  [](const auto &a, const auto &b)
-                  { return a.first < b.first; });
-
-        if ((int)next_beam.size() > BEAM_SIZE)
-            next_beam.resize(BEAM_SIZE);
-
-        beam.clear();
-        for (auto &x : next_beam)
-            beam.push_back(x.second);
+        results.push_back(Pi);
     }
 
-    std::vector<int> best_state = beam[0];
+    std::sort(results.begin(), results.end(),
+              [](const PathResult &a, const PathResult &b)
+              { return a.cost < b.cost; });
 
-    double best_val = compute_penalty(best_state);
-    for (auto &s : beam)
+    return results;
+}
+
+PathResult AlgorithmsPhase2::dijkstraPenaltyDual(
+    const Graph &graph, int source, int target,
+    const std::unordered_map<std::pair<int, int>, double, EdgeHash> &penalty)
+{
+    PathResult result;
+    if (!graph.hasNode(source) || !graph.hasNode(target))
+        return result;
+
+    using PQ = std::priority_queue<DState, std::vector<DState>, std::greater<DState>>;
+    PQ pq;
+
+    int n = graph.getNodeCount();
+    std::vector<double> best_search_cost(n, INF);
+    std::vector<double> best_true_cost(n, INF);
+    std::vector<int> parent(n, -1);
+
+    best_search_cost[source] = 0.0;
+    best_true_cost[source] = 0.0;
+
+    pq.push({0.0, 0.0, source});
+
+    while (!pq.empty())
     {
-        double val = compute_penalty(s);
-        if (val < best_val)
+        auto [sc, tc, u] = pq.top();
+        pq.pop();
+
+        if (sc > best_search_cost[u])
+            continue;
+
+        if (u == target)
         {
-            best_val = val;
-            best_state = s;
+            result.possible = true;
+            result.cost = tc;
+
+            result.path.clear();
+            for (int x = target; x != source; x = parent[x])
+                result.path.push_back(x);
+            result.path.push_back(source);
+            std::reverse(result.path.begin(), result.path.end());
+
+            return result;
+        }
+
+        for (int eid : graph.getAdjEdges(u))
+        {
+            const Edge *e = graph.getEdge(eid);
+            if (!e || e->is_deleted)
+                continue;
+
+            int v = (e->u == u ? e->v : e->u);
+            if (e->oneway && e->u != u)
+                continue;
+
+            double len = e->length;
+
+            auto key = std::make_pair(std::min(u, v), std::max(u, v));
+            double mul = 1.0;
+            if (penalty.count(key))
+                mul += penalty.at(key);
+
+            double new_true = tc + len;
+            double new_search = sc + len * mul;
+
+            if (new_search < best_search_cost[v])
+            {
+                best_search_cost[v] = new_search;
+                best_true_cost[v] = new_true;
+                parent[v] = u;
+
+                pq.push({new_search, new_true, v});
+            }
         }
     }
 
-    std::vector<PathResult> results;
-    for (int idx : best_state)
-        results.push_back(candidates[idx]);
-
-    return results;
+    return result;
 }
 
 double AlgorithmsPhase2::euclideanHeuristic(const Graph &graph, int from, int to)
@@ -1408,9 +1465,10 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
     if (!graph.hasNode(source) || !graph.hasNode(target))
         return result;
 
-    std::unordered_map<int, double> g_score;
-    std::unordered_map<int, double> f_score;
-    
+    int n = graph.getNodeCount();
+    std::vector<double> g_score(n, INF);
+    std::vector<double> f_score(n, INF);
+
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
 
     g_score[source] = 0;
@@ -1422,7 +1480,7 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
         auto [f, u] = pq.top();
         pq.pop();
 
-        if (f_score.count(u) && f > f_score[u])
+        if (f > f_score[u])
             continue;
 
         if (u == target)
@@ -1444,7 +1502,7 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
 
             double tentative_g = g_score[u] + e->length;
 
-            if (!g_score.count(v) || tentative_g < g_score[v])
+            if (tentative_g < g_score[v])
             {
                 g_score[v] = tentative_g;
                 f_score[v] = g_score[v] + heuristic_weight * euclideanHeuristic(graph, v, target);
@@ -1493,7 +1551,7 @@ std::vector<ApproxResult> AlgorithmsPhase2::approximate_shortest_paths(
 }
 
 
-=== Phase-2\Algorithms.hpp ===
+=== Phase-2/Algorithms.hpp ===
 #ifndef ALGORITHMS_HPP_PHASE2
 #define ALGORITHMS_HPP_PHASE2
 
@@ -1502,6 +1560,7 @@ std::vector<ApproxResult> AlgorithmsPhase2::approximate_shortest_paths(
 #include <unordered_set>
 #include <string>
 #include <utility>
+#include <random>
 
 struct PathResult
 {
@@ -1526,6 +1585,38 @@ struct EdgeHash
     }
 };
 
+struct VectorHash
+{
+    size_t operator()(const std::vector<int> &v) const
+    {
+        size_t seed = v.size();
+        for (auto x : v)
+        {
+            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
+
+struct FastEdge
+{
+    int to;
+    double weight;
+    int id;
+};
+
+struct DState
+{
+    double search_cost;
+    double true_cost;
+    int node;
+
+    bool operator>(const DState &other) const
+    {
+        return search_cost > other.search_cost;
+    }
+};
+
 class AlgorithmsPhase2
 {
 public:
@@ -1535,19 +1626,27 @@ public:
     static PathResult astar(const Graph &graph, int source, int target, double heuristic_weight);
 
 private:
-    static PathResult dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges, const std::unordered_set<int> &forbidden_nodes);
+    static PathResult dijkstraFast(int n, const std::vector<std::vector<FastEdge>> &adj, int source, int target, std::vector<double> &dist, std::vector<int> &parent, const std::vector<bool> &node_blocked, const std::vector<bool> &edge_blocked);
     static PathResult dijkstraSimple(const Graph &graph, int source, int target);
 
     static bool isSimplePath(const std::vector<int> &path);
     static double OverlappingEdgePercent(const std::vector<int> &path1, const std::vector<int> &path2);
 
+    static PathResult dijkstraPenaltyDual(const Graph &graph, int source, int target, const std::unordered_map<std::pair<int, int>, double, EdgeHash> &penalty);
+   
     static double euclideanHeuristic(const Graph &graph, int from, int to);
+
+    static void resetDijkstraState(std::vector<double> &dist, std::vector<int> &parent)
+    {
+        std::fill(dist.begin(), dist.end(), std::numeric_limits<double>::max());
+        std::fill(parent.begin(), parent.end(), -1);
+    }
 };
 
 #endif
 
 
-=== Phase-2\Graph.cpp ===
+=== Phase-2/Graph.cpp ===
 #include "Graph.hpp"
 #include <algorithm>
 #include <iostream>
@@ -1556,8 +1655,11 @@ private:
 
 void Graph::addNode(const Node &node)
 {
+    if (node.id < 0 || node.id >= MAX_NODES)
+        return;
+
     nodes[node.id] = node;
-    adjacency_list[node.id] = std::vector<int>();
+    max_node_id = std::max(max_node_id, node.id);
 
     for (const auto &poi : node.pois)
     {
@@ -1570,6 +1672,9 @@ void Graph::addNode(const Node &node)
 
 void Graph::addEdge(const Edge &edge)
 {
+    if (edge.id < 0 || edge.id >= MAX_EDGES)
+        return;
+
     Edge e = edge;
     e.original_length = edge.length;
     e.original_average_time = edge.average_time;
@@ -1577,6 +1682,8 @@ void Graph::addEdge(const Edge &edge)
     e.original_road_type = edge.road_type;
 
     edges[e.id] = e;
+    max_edge_id = std::max(max_edge_id, e.id);
+
     adjacency_list[e.u].push_back(e.id);
     if (!e.oneway)
     {
@@ -1586,46 +1693,50 @@ void Graph::addEdge(const Edge &edge)
 
 const Node *Graph::getNode(int node_id) const
 {
-    auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    if (node_id < 0 || node_id >= MAX_NODES)
+        return nullptr;
+    if (nodes[node_id].id == -1)
+        return nullptr;
+    return &nodes[node_id];
 }
 
 const Edge *Graph::getEdge(int edge_id) const
 {
-    auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    if (edge_id < 0 || edge_id >= MAX_EDGES)
+        return nullptr;
+    if (edges[edge_id].id == -1)
+        return nullptr;
+    return &edges[edge_id];
 }
 
 bool Graph::hasNode(int node_id) const
 {
-    return nodes.find(node_id) != nodes.end();
+    return node_id >= 0 && node_id < MAX_NODES && nodes[node_id].id != -1;
 }
 
 bool Graph::hasEdge(int edge_id) const
 {
-    return edges.find(edge_id) != edges.end();
+    return edge_id >= 0 && edge_id < MAX_EDGES && edges[edge_id].id != -1;
 }
 
 bool Graph::removeEdge(int edge_id)
 {
-    auto it = edges.find(edge_id);
-    if (it != edges.end())
-    {
-        if (it->second.is_deleted)
-            return false;
-        it->second.is_deleted = true;
-        return true;
-    }
-    return false;
+    if (!hasEdge(edge_id))
+        return false;
+
+    if (edges[edge_id].is_deleted)
+        return false;
+
+    edges[edge_id].is_deleted = true;
+    return true;
 }
 
 bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 {
-    auto it = edges.find(edge_id);
-    if (it == edges.end())
+    if (!hasEdge(edge_id))
         return false;
 
-    Edge &e = it->second;
+    Edge &e = edges[edge_id];
     if (e.is_deleted)
     {
         if (!has_patch_data)
@@ -1667,9 +1778,10 @@ bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 
 const std::vector<int> &Graph::getAdjEdges(int node_id) const
 {
-    static const std::vector<int> empty; // Return type is reference need to declare empty
-    auto it = adjacency_list.find(node_id);
-    return (it != adjacency_list.end()) ? it->second : empty;
+    static const std::vector<int> empty;
+    if (node_id < 0 || node_id >= MAX_NODES)
+        return empty;
+    return adjacency_list[node_id];
 }
 
 std::vector<int> Graph::getNodesPOI(const std::string &poi) const
@@ -1736,8 +1848,11 @@ int Graph::findNearestNode(double lat, double lon) const
 {
     int nearest = -1;
     double min_dist = INF;
-    for (const auto &[id, node] : nodes)
+    for (int id = 0; id <= max_node_id; ++id)
     {
+        if (nodes[id].id == -1)
+            continue;
+        const Node &node = nodes[id];
         double dist = EuDistance(lat, lon, node.lat, node.lon);
         if (dist < min_dist)
         {
@@ -1748,8 +1863,7 @@ int Graph::findNearestNode(double lat, double lon) const
     return nearest;
 }
 
-
-=== Phase-2\Graph.hpp ===
+=== Phase-2/Graph.hpp ===
 #ifndef GRAPH_HPP
 #define GRAPH_HPP
 
@@ -1801,13 +1915,23 @@ struct Edge
 class Graph
 {
 private:
-    std::unordered_map<int, Node> nodes;
-    std::unordered_map<int, Edge> edges;
-    std::unordered_map<int, std::vector<int>> adjacency_list;
+    static constexpr int MAX_NODES = 100000;
+    static constexpr int MAX_EDGES = 100000;
+
+    std::vector<Node> nodes;
+    std::vector<Edge> edges;
+    std::vector<std::vector<int>> adjacency_list;
     std::unordered_map<std::string, std::vector<int>> poi_index;
+    int max_node_id;
+    int max_edge_id;
 
 public:
-    Graph() {}
+    Graph() : max_node_id(-1), max_edge_id(-1)
+    {
+        nodes.resize(MAX_NODES);
+        edges.resize(MAX_EDGES);
+        adjacency_list.resize(MAX_NODES);
+    }
 
     void addNode(const Node &node);
     void addEdge(const Edge &edge);
@@ -1827,17 +1951,16 @@ public:
     double EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact = false) const;
     double edgeTimeinSlot(int edge_id, int time_slot) const;
 
-    const std::unordered_map<int, Node> &getNodes() const { return nodes; }
-    const std::unordered_map<int, Edge> &getEdges() const { return edges; }
-    int getNodeCount() const { return nodes.size(); }
+    const std::vector<Node> &getNodes() const { return nodes; }
+    const std::vector<Edge> &getEdges() const { return edges; }
+    int getNodeCount() const { return max_node_id + 1; }
 
     int findNearestNode(double lat, double lon) const;
 };
 
 #endif
 
-
-=== Phase-2\JsonParser.cpp ===
+=== Phase-2/JsonParser.cpp ===
 #include "JsonParser.hpp"
 #include <iostream>
 
@@ -1920,7 +2043,7 @@ void JsonParser::writeOutput(const std::string &filename, const json &output)
 }
 
 
-=== Phase-2\JsonParser.hpp ===
+=== Phase-2/JsonParser.hpp ===
 #ifndef JSON_PARSER_HPP
 #define JSON_PARSER_HPP
 
@@ -1947,7 +2070,7 @@ private:
 #endif
 
 
-=== Phase-2\QueryHandler.cpp ===
+=== Phase-2/QueryHandler.cpp ===
 #include "QueryHandler.hpp"
 #include <chrono>
 #include <iostream>
@@ -1991,7 +2114,7 @@ json QueryHandlerPhase2::processQueries(const json &queries_json)
             }
 
             auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+            auto duration = std::chrono::duration<double, std::milli>(end - start);
             result["processing_time"] = duration.count();
         }
         catch (...)
@@ -2037,7 +2160,7 @@ json QueryHandlerPhase2::handleKShortestPathsHeuristic(const json &query)
     int source = query["source"];
     int target = query["target"];
     int k = query["k"];
-    int overlap_threshold = query["overlap_threshold"];
+    int overlap_threshold = query["heuristic"];
 
     auto paths = AlgorithmsPhase2::k_shortest_paths_heuristic(graph, source, target, k, overlap_threshold);
     result["paths"] = json::array();
@@ -2086,7 +2209,7 @@ json QueryHandlerPhase2::handleApproxShortestPath(const json &query)
 }
 
 
-=== Phase-2\QueryHandler.hpp ===
+=== Phase-2/QueryHandler.hpp ===
 #ifndef QUERY_HANDLER_PHASE2_HPP
 #define QUERY_HANDLER_PHASE2_HPP
 
@@ -2112,7 +2235,7 @@ private:
 #endif
 
 
-=== Phase-2\SampleDriver.cpp ===
+=== Phase-2/SampleDriver.cpp ===
 #include "Graph.hpp"
 #include "Algorithms.hpp"
 #include "JsonParser.hpp"
@@ -2139,8 +2262,8 @@ int main(int argc, char *argv[])
         auto t1 = std::chrono::high_resolution_clock::now();
         Graph graph = JsonParser::parseGraph(graph_file);
         auto t2 = std::chrono::high_resolution_clock::now();
-        std::cout << "Graph loaded: " << graph.getNodes().size() << " nodes, "
-                  << graph.getEdges().size() << " edges ("
+
+        std::cout << "Graph loaded: " << graph.getNodeCount() << " nodes ("
                   << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count() << " ms)" << std::endl;
 
         std::cout << "Preprocessing (can take up to 5 min)..." << std::endl;
@@ -2171,8 +2294,7 @@ int main(int argc, char *argv[])
     }
 }
 
-
-=== Phase-3\Algorithms.cpp ===
+=== Phase-3/Algorithms.cpp ===
 #include "Algorithms.hpp"
 #include <queue>
 #include <algorithm>
@@ -2184,35 +2306,33 @@ double DistanceManager::getTime(int from, int to)
 {
     if (from == to)
         return 0.0;
-    if (time_cache.count(from) && time_cache[from].count(to))
-    {
-        return time_cache[from][to];
-    }
 
+    // Check cache
+    auto it = time_cache[from].find(to);
+    if (it != time_cache[from].end())
+        return it->second;
+
+    int n = graph.getNodeCount();
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<>> pq;
-    std::unordered_map<int, double> dist;
+    std::vector<double> dist(n, INF);
 
     dist[from] = 0.0;
     pq.push({0.0, from});
-
-    bool found = false;
 
     while (!pq.empty())
     {
         auto [d, u] = pq.top();
         pq.pop();
 
-        if (dist.count(u) && d > dist[u])
+        if (d > dist[u])
             continue;
 
-        time_cache[from][u] = d;
+        // Cache discovered distances
+        if (time_cache[from].find(u) == time_cache[from].end())
+            time_cache[from][u] = d;
 
         if (u == to)
-        {
-            found = true;
-            if (d > dist[to])
-                break;
-        }
+            break;
 
         for (int eid : graph.getAdjEdges(u))
         {
@@ -2220,12 +2340,12 @@ double DistanceManager::getTime(int from, int to)
             if (!e || e->is_deleted)
                 continue;
 
-            double new_dist = d + e->average_time;
             int v = (e->u == u) ? e->v : e->u;
             if (e->oneway && e->u != u)
                 continue;
 
-            if (!dist.count(v) || new_dist < dist[v])
+            double new_dist = d + e->average_time;
+            if (new_dist < dist[v])
             {
                 dist[v] = new_dist;
                 pq.push({new_dist, v});
@@ -2233,15 +2353,18 @@ double DistanceManager::getTime(int from, int to)
         }
     }
 
-    if (!time_cache[from].count(to))
-        return 1e9;
+    // Cache and return
+    if (time_cache[from].find(to) == time_cache[from].end())
+        time_cache[from][to] = 1e9;
+
     return time_cache[from][to];
 }
 
 std::vector<int> DistanceManager::getPath(int from, int to)
 {
-    std::unordered_map<int, double> dist;
-    std::unordered_map<int, int> parent;
+    int n = graph.getNodeCount();
+    std::vector<double> dist(n, INF);
+    std::vector<int> parent(n, -1);
     std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<>> pq;
 
     dist[from] = 0.0;
@@ -2252,12 +2375,14 @@ std::vector<int> DistanceManager::getPath(int from, int to)
     {
         auto [d, u] = pq.top();
         pq.pop();
+
         if (u == to)
         {
             found = true;
             break;
         }
-        if (dist.count(u) && d > dist[u])
+
+        if (d > dist[u])
             continue;
 
         for (int eid : graph.getAdjEdges(u))
@@ -2265,12 +2390,13 @@ std::vector<int> DistanceManager::getPath(int from, int to)
             const Edge *e = graph.getEdge(eid);
             if (!e || e->is_deleted)
                 continue;
+
             int v = (e->u == u) ? e->v : e->u;
             if (e->oneway && e->u != u)
                 continue;
 
             double new_dist = d + e->average_time;
-            if (!dist.count(v) || new_dist < dist[v])
+            if (new_dist < dist[v])
             {
                 dist[v] = new_dist;
                 parent[v] = u;
@@ -2282,6 +2408,7 @@ std::vector<int> DistanceManager::getPath(int from, int to)
     std::vector<int> path;
     if (!found)
         return path;
+
     for (int curr = to; curr != from; curr = parent[curr])
         path.push_back(curr);
     path.push_back(from);
@@ -2308,7 +2435,6 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
     }
 
     performRegretInsertion(dm, num_drivers, depot, orders, driver_stops, unassigned);
-
     optimizeRoutes(dm, depot, orders, driver_stops);
 
     ScheduleResult result;
@@ -2349,6 +2475,14 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
                             if (current_time < o.ready_time)
                                 current_time = o.ready_time;
                             assigned_order_ids.insert(o.order_id);
+                        }
+                    }
+
+                    if (o.dropoff_node == stop_node)
+                    {
+                        if (assigned_order_ids.count(o.order_id))
+                        {
+                            result.total_delivery_time += current_time * o.priority;
                         }
                     }
                 }
@@ -2409,7 +2543,6 @@ void AlgorithmsPhase3::performRegretInsertion(
 
                     for (int j = i + 1; j <= n + 1; ++j)
                     {
-
                         int prev_d, next_d;
 
                         if (j == i + 1)
@@ -2595,7 +2728,7 @@ double AlgorithmsPhase3::calculateInsertionCost(DistanceManager &dm, int prev, i
     return dm.getTime(prev, insert) + dm.getTime(insert, next) - dm.getTime(prev, next);
 }
 
-=== Phase-3\Algorithms.hpp ===
+=== Phase-3/Algorithms.hpp ===
 #ifndef ALGORITHMS_PHASE3_HPP
 #define ALGORITHMS_PHASE3_HPP
 
@@ -2682,7 +2815,11 @@ private:
 
 #endif
 
-=== Phase-3\Graph.cpp ===
+=== Phase-3/Graph.cpp ===
+// Phase-3/Graph.cpp is IDENTICAL to Phase-1/Graph.cpp
+// Just copy the entire Phase-1/Graph.cpp file
+// The only difference is the MAX_NODES and MAX_EDGES constants in the .hpp file
+
 #include "Graph.hpp"
 #include <algorithm>
 #include <iostream>
@@ -2691,8 +2828,11 @@ private:
 
 void Graph::addNode(const Node &node)
 {
+    if (node.id < 0 || node.id >= MAX_NODES)
+        return;
+
     nodes[node.id] = node;
-    adjacency_list[node.id] = std::vector<int>();
+    max_node_id = std::max(max_node_id, node.id);
 
     for (const auto &poi : node.pois)
     {
@@ -2705,6 +2845,9 @@ void Graph::addNode(const Node &node)
 
 void Graph::addEdge(const Edge &edge)
 {
+    if (edge.id < 0 || edge.id >= MAX_EDGES)
+        return;
+
     Edge e = edge;
     e.original_length = edge.length;
     e.original_average_time = edge.average_time;
@@ -2712,6 +2855,8 @@ void Graph::addEdge(const Edge &edge)
     e.original_road_type = edge.road_type;
 
     edges[e.id] = e;
+    max_edge_id = std::max(max_edge_id, e.id);
+
     adjacency_list[e.u].push_back(e.id);
     if (!e.oneway)
     {
@@ -2721,46 +2866,50 @@ void Graph::addEdge(const Edge &edge)
 
 const Node *Graph::getNode(int node_id) const
 {
-    auto it = nodes.find(node_id);
-    return (it != nodes.end()) ? &(it->second) : nullptr;
+    if (node_id < 0 || node_id >= MAX_NODES)
+        return nullptr;
+    if (nodes[node_id].id == -1)
+        return nullptr;
+    return &nodes[node_id];
 }
 
 const Edge *Graph::getEdge(int edge_id) const
 {
-    auto it = edges.find(edge_id);
-    return (it != edges.end()) ? &(it->second) : nullptr;
+    if (edge_id < 0 || edge_id >= MAX_EDGES)
+        return nullptr;
+    if (edges[edge_id].id == -1)
+        return nullptr;
+    return &edges[edge_id];
 }
 
 bool Graph::hasNode(int node_id) const
 {
-    return nodes.find(node_id) != nodes.end();
+    return node_id >= 0 && node_id < MAX_NODES && nodes[node_id].id != -1;
 }
 
 bool Graph::hasEdge(int edge_id) const
 {
-    return edges.find(edge_id) != edges.end();
+    return edge_id >= 0 && edge_id < MAX_EDGES && edges[edge_id].id != -1;
 }
 
 bool Graph::removeEdge(int edge_id)
 {
-    auto it = edges.find(edge_id);
-    if (it != edges.end())
-    {
-        if (it->second.is_deleted)
-            return false;
-        it->second.is_deleted = true;
-        return true;
-    }
-    return false;
+    if (!hasEdge(edge_id))
+        return false;
+
+    if (edges[edge_id].is_deleted)
+        return false;
+
+    edges[edge_id].is_deleted = true;
+    return true;
 }
 
 bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 {
-    auto it = edges.find(edge_id);
-    if (it == edges.end())
+    if (!hasEdge(edge_id))
         return false;
 
-    Edge &e = it->second;
+    Edge &e = edges[edge_id];
     if (e.is_deleted)
     {
         if (!has_patch_data)
@@ -2802,9 +2951,10 @@ bool Graph::modifyEdge(int edge_id, const Edge &patch, bool has_patch_data)
 
 const std::vector<int> &Graph::getAdjEdges(int node_id) const
 {
-    static const std::vector<int> empty; // Return type is reference need to declare empty
-    auto it = adjacency_list.find(node_id);
-    return (it != adjacency_list.end()) ? it->second : empty;
+    static const std::vector<int> empty;
+    if (node_id < 0 || node_id >= MAX_NODES)
+        return empty;
+    return adjacency_list[node_id];
 }
 
 std::vector<int> Graph::getNodesPOI(const std::string &poi) const
@@ -2871,8 +3021,11 @@ int Graph::findNearestNode(double lat, double lon) const
 {
     int nearest = -1;
     double min_dist = INF;
-    for (const auto &[id, node] : nodes)
+    for (int id = 0; id <= max_node_id; ++id)
     {
+        if (nodes[id].id == -1)
+            continue;
+        const Node &node = nodes[id];
         double dist = EuDistance(lat, lon, node.lat, node.lon);
         if (dist < min_dist)
         {
@@ -2883,8 +3036,7 @@ int Graph::findNearestNode(double lat, double lon) const
     return nearest;
 }
 
-
-=== Phase-3\Graph.hpp ===
+=== Phase-3/Graph.hpp ===
 #ifndef GRAPH_HPP
 #define GRAPH_HPP
 
@@ -2936,13 +3088,23 @@ struct Edge
 class Graph
 {
 private:
-    std::unordered_map<int, Node> nodes;
-    std::unordered_map<int, Edge> edges;
-    std::unordered_map<int, std::vector<int>> adjacency_list;
+    static constexpr int MAX_NODES = 5000;
+    static constexpr int MAX_EDGES = 5000;
+
+    std::vector<Node> nodes;
+    std::vector<Edge> edges;
+    std::vector<std::vector<int>> adjacency_list;
     std::unordered_map<std::string, std::vector<int>> poi_index;
+    int max_node_id;
+    int max_edge_id;
 
 public:
-    Graph() {}
+    Graph() : max_node_id(-1), max_edge_id(-1)
+    {
+        nodes.resize(MAX_NODES);
+        edges.resize(MAX_EDGES);
+        adjacency_list.resize(MAX_NODES);
+    }
 
     void addNode(const Node &node);
     void addEdge(const Edge &edge);
@@ -2962,17 +3124,16 @@ public:
     double EuDistance(double lat1, double lon1, double lat2, double lon2, bool exact = false) const;
     double edgeTimeinSlot(int edge_id, int time_slot) const;
 
-    const std::unordered_map<int, Node> &getNodes() const { return nodes; }
-    const std::unordered_map<int, Edge> &getEdges() const { return edges; }
-    int getNodeCount() const { return nodes.size(); }
+    const std::vector<Node> &getNodes() const { return nodes; }
+    const std::vector<Edge> &getEdges() const { return edges; }
+    int getNodeCount() const { return max_node_id + 1; }
 
     int findNearestNode(double lat, double lon) const;
 };
 
 #endif
 
-
-=== Phase-3\JsonParser.cpp ===
+=== Phase-3/JsonParser.cpp ===
 #include "JsonParser.hpp"
 #include <fstream>
 #include <iostream>
@@ -3077,7 +3238,7 @@ void JsonParserPhase3::writeOutput(const std::string &filename, const json &outp
     file << output.dump(2);
 }
 
-=== Phase-3\JsonParser.hpp ===
+=== Phase-3/JsonParser.hpp ===
 #ifndef JSON_PARSER_PHASE3_HPP
 #define JSON_PARSER_PHASE3_HPP
 
@@ -3106,7 +3267,7 @@ private:
 
 #endif
 
-=== Phase-3\QueryHandler.cpp ===
+=== Phase-3/QueryHandler.cpp ===
 #include "QueryHandler.hpp"
 #include "JsonParser.hpp"
 #include <chrono>
@@ -3137,7 +3298,7 @@ json QueryHandlerPhase3::solveScheduling(const json &input_json)
     return output;
 }
 
-=== Phase-3\QueryHandler.hpp ===
+=== Phase-3/QueryHandler.hpp ===
 #ifndef QUERY_HANDLER_PHASE3_HPP
 #define QUERY_HANDLER_PHASE3_HPP
 
@@ -3158,7 +3319,7 @@ public:
 
 #endif
 
-=== Phase-3\SampleDriver.cpp ===
+=== Phase-3/SampleDriver.cpp ===
 #include "Graph.hpp"
 #include "JsonParser.hpp"
 #include "QueryHandler.hpp"

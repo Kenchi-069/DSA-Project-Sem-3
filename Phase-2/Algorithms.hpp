@@ -63,6 +63,13 @@ struct DState
     }
 };
 
+struct SearchBuffers
+{
+    std::vector<double> g_score;
+    std::vector<int> visited_token;
+    int current_token = 0;
+};
+
 class AlgorithmsPhase2
 {
 public:
@@ -74,6 +81,8 @@ public:
 private:
     static PathResult dijkstraFast(int n, const std::vector<std::vector<FastEdge>> &adj, int source, int target, std::vector<double> &dist, std::vector<int> &parent, const std::vector<bool> &node_blocked, const std::vector<bool> &edge_blocked);
     static PathResult dijkstraSimple(const Graph &graph, int source, int target);
+
+    static PathResult astar_optimized(const Graph &graph, int source, int target, double heuristic_weight, SearchBuffers &buffers);
 
     static bool isSimplePath(const std::vector<int> &path);
     static double OverlappingEdgePercent(const std::vector<int> &path1, const std::vector<int> &path2);

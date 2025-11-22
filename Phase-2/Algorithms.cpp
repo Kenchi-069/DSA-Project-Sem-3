@@ -167,18 +167,14 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, i
 
     std::vector<std::vector<FastEdge>> adj(n);
     int max_edge_id = 0;
-
     for (const auto &pair : graph.getEdges())
     {
         const Edge &e = pair.second;
         if (e.is_deleted)
             continue;
-
         adj[e.u].push_back({e.v, e.length, e.id});
         if (!e.oneway)
-        {
             adj[e.v].push_back({e.u, e.length, e.id});
-        }
         max_edge_id = std::max(max_edge_id, e.id);
     }
 
@@ -187,12 +183,16 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, i
     std::vector<bool> node_blocked(n, false);
     std::vector<bool> edge_blocked(max_edge_id + 1, false);
 
+    std::unordered_set<std::vector<int>, VectorHash> distinct_paths;
+
     resetDijkstraState(dist, parent);
     PathResult first = dijkstraFast(n, adj, source, target, dist, parent, node_blocked, edge_blocked);
 
     if (!first.possible)
         return results;
+
     results.push_back(first);
+    distinct_paths.insert(first.path);
 
     using PathCandidate = std::pair<double, PathResult>;
     struct ComparePathCandidate
@@ -204,7 +204,9 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, i
     };
     std::priority_queue<PathCandidate, std::vector<PathCandidate>, ComparePathCandidate> candidates;
 
-    for (int kth = 1; kth < k; kth++)
+    int processed_count = 0;
+
+    while (results.size() < k)
     {
         const auto &prev_path = results.back().path;
 
@@ -214,23 +216,38 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, i
             std::vector<int> root_path(prev_path.begin(), prev_path.begin() + i + 1);
 
             double root_path_cost = 0;
-
+            bool path_valid = true;
             for (size_t j = 0; j < i; j++)
             {
                 node_blocked[root_path[j]] = true;
                 int u = root_path[j];
                 int v = root_path[j + 1];
+                bool edge_found = false;
                 for (auto &e : adj[u])
                 {
                     if (e.to == v && !edge_blocked[e.id])
                     {
                         root_path_cost += e.weight;
+                        edge_found = true;
                         break;
                     }
                 }
+                if (!edge_found)
+                {
+                    path_valid = false;
+                    break;
+                }
+            }
+
+            if (!path_valid)
+            {
+                for (size_t j = 0; j < i; j++)
+                    node_blocked[root_path[j]] = false;
+                continue;
             }
 
             std::vector<int> edges_to_restore;
+
             for (const auto &result : results)
             {
                 const auto &p_path = result.path;
@@ -239,16 +256,12 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, i
                 {
                     int u = p_path[i];
                     int v = p_path[i + 1];
-
                     for (const auto &e : adj[u])
                     {
-                        if (e.to == v)
+                        if (e.to == v && !edge_blocked[e.id])
                         {
-                            if (!edge_blocked[e.id])
-                            {
-                                edge_blocked[e.id] = true;
-                                edges_to_restore.push_back(e.id);
-                            }
+                            edge_blocked[e.id] = true;
+                            edges_to_restore.push_back(e.id);
                         }
                     }
                 }
@@ -269,7 +282,11 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths(const Graph &graph, i
                 total_path.path.insert(total_path.path.end(), spur_path.path.begin() + 1, spur_path.path.end());
                 total_path.cost = root_path_cost + spur_path.cost;
 
-                candidates.push({total_path.cost, total_path});
+                if (distinct_paths.find(total_path.path) == distinct_paths.end())
+                {
+                    distinct_paths.insert(total_path.path);
+                    candidates.push({total_path.cost, total_path});
+                }
             }
         }
 
@@ -491,34 +508,103 @@ PathResult AlgorithmsPhase2::astar(const Graph &graph, int source, int target, d
     return result;
 }
 
+PathResult AlgorithmsPhase2::astar_optimized(const Graph &graph, int source, int target, double heuristic_weight, SearchBuffers &buffers)
+{
+    PathResult result;
+
+    if (!graph.hasNode(source) || !graph.hasNode(target))
+        return result;
+
+    int num_nodes = graph.getNodeCount();
+
+    if (buffers.g_score.size() < static_cast<size_t>(num_nodes))
+    {
+        buffers.g_score.resize(num_nodes);
+        buffers.visited_token.resize(num_nodes, 0);
+    }
+
+    buffers.current_token++;
+
+    std::priority_queue<std::pair<double, int>, std::vector<std::pair<double, int>>, std::greater<std::pair<double, int>>> pq;
+
+    buffers.g_score[source] = 0;
+    buffers.visited_token[source] = buffers.current_token;
+
+    double start_h = heuristic_weight * euclideanHeuristic(graph, source, target);
+    pq.push({start_h, source});
+
+    while (!pq.empty())
+    {
+        auto [f, u] = pq.top();
+        pq.pop();
+
+        if (f > buffers.g_score[u] + heuristic_weight * euclideanHeuristic(graph, u, target) + 1e-9)
+            continue;
+
+        if (u == target)
+        {
+            result.possible = true;
+            result.cost = buffers.g_score[u];
+            return result;
+        }
+
+        for (int edge_id : graph.getAdjEdges(u))
+        {
+            const Edge *e = graph.getEdge(edge_id);
+            if (!e || e->is_deleted)
+                continue;
+
+            int v = (e->u == u) ? e->v : e->u;
+            if (e->oneway && e->u != u)
+                continue;
+
+            double tentative_g = buffers.g_score[u] + e->length;
+
+            bool unvisited = (buffers.visited_token[v] != buffers.current_token);
+
+            if (unvisited || tentative_g < buffers.g_score[v])
+            {
+                buffers.visited_token[v] = buffers.current_token;
+                buffers.g_score[v] = tentative_g;
+                double new_f = tentative_g + heuristic_weight * euclideanHeuristic(graph, v, target);
+                pq.push({new_f, v});
+            }
+        }
+    }
+    return result;
+}
+
 std::vector<ApproxResult> AlgorithmsPhase2::approximate_shortest_paths(
     const Graph &graph,
     const std::vector<std::pair<int, int>> &queries,
     double time_budget_ms,
     double acceptable_error_pct)
 {
-
     auto start_time = std::chrono::high_resolution_clock::now();
     std::vector<ApproxResult> results;
+    results.reserve(queries.size());
 
     double heuristic_weight = 1.0 + (acceptable_error_pct / 100.0) * 4.0;
     if (heuristic_weight < 1.25)
         heuristic_weight = 1.25;
 
+    SearchBuffers buffers;
+    int num_nodes = graph.getNodeCount();
+    buffers.g_score.resize(num_nodes);
+    buffers.visited_token.resize(num_nodes, 0);
+
     for (const auto &[source, target] : queries)
     {
         auto current_time = std::chrono::high_resolution_clock::now();
-        auto elapsed = std::chrono::duration<double, std::milli>(
-                           current_time - start_time)
-                           .count();
+        auto elapsed = std::chrono::duration<double, std::milli>(current_time - start_time).count();
 
-        // Safety margin
         if (elapsed >= time_budget_ms * 0.90)
         {
             break;
         }
 
-        PathResult result = astar(graph, source, target, heuristic_weight);
+        PathResult result = astar_optimized(graph, source, target, heuristic_weight, buffers);
+
         if (result.possible)
         {
             results.push_back({source, target, result.cost});

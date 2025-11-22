@@ -53,11 +53,8 @@ double Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
     }
 
     double arrivalTime = startTime + totalTime;
-    int arrivalSlot = static_cast<int>(std::floor(arrivalTime / 900.0)) % 96;
-    if (arrivalSlot < 0)
-        arrivalSlot += 96;
 
-    totalTime;
+    return totalTime;
 }
 
 PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, int target, const Constraints &constraints)

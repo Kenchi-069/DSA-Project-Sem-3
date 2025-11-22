@@ -19,7 +19,7 @@ json QueryHandler::processQueries(const json &queries_json)
         try
         {
             std::string type = query.value("type", "");
-            auto start = std::chrono::high_resolution_clock::now();
+            auto start = std::chrono::steady_clock::now();
 
             if (type == "remove_edge")
                 result = handleRemoveEdges(query);
@@ -36,8 +36,8 @@ json QueryHandler::processQueries(const json &queries_json)
                     result["id"] = query["id"];
             }
 
-            auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+            auto end = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration<double, std::milli>(end - start);
             result["processing_time"] = duration.count();
         }
         catch (...)
