@@ -142,14 +142,7 @@ json QueryHandler::handleShortestPath(const json &query)
     result["possible"] = path.possible;
     if (path.possible)
     {
-        if (mode == "time")
-        {
-            result["minimum_time"] = path.cost;
-        }
-        else
-        {
-            result["minimum_distance"] = path.cost;
-        }
+        result["minimum_time/minimum_distance"] = path.cost;
         result["path"] = path.path;
     }
     return result;

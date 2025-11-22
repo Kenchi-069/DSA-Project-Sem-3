@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <string>
 #include <utility>
+#include <random>
 
 struct PathResult
 {
@@ -30,6 +31,26 @@ struct EdgeHash
     }
 };
 
+struct VectorHash
+{
+    size_t operator()(const std::vector<int> &v) const
+    {
+        size_t seed = v.size();
+        for (auto x : v)
+        {
+            seed ^= x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
+
+struct FastEdge
+{
+    int to;
+    double weight;
+    int id;
+};
+
 class AlgorithmsPhase2
 {
 public:
@@ -39,13 +60,24 @@ public:
     static PathResult astar(const Graph &graph, int source, int target, double heuristic_weight);
 
 private:
-    static PathResult dijkstra(const Graph &graph, int source, int target, const std::unordered_set<std::pair<int, int>, EdgeHash> &forbidden_edges, const std::unordered_set<int> &forbidden_nodes);
+    static PathResult dijkstraFast(int n, const std::vector<std::vector<FastEdge>> &adj, int source, int target, std::vector<double> &dist, std::vector<int> &parent, const std::vector<bool> &node_blocked, const std::vector<bool> &edge_blocked);
     static PathResult dijkstraSimple(const Graph &graph, int source, int target);
+
+    static PathResult dijkstraWithPenalties(const Graph &graph, int source, int target, const std::unordered_map<std::pair<int, int>, int, EdgeHash> &edge_usage, double penalty_multiplier, double max_cost);
+    static std::vector<int> selectViaCandidates(const Graph &graph, const std::vector<int> &shortest_path, int count);
+    static PathResult dijkstraWithCostLimit(const Graph &graph, int source, int target, double cost_limit, const std::unordered_map<std::pair<int, int>, int, EdgeHash> &edge_usage);
+    static PathResult dijkstraRandomized(const Graph &graph, int source, int target, double perturbation, std::mt19937 &rng, double max_cost);
 
     static bool isSimplePath(const std::vector<int> &path);
     static double OverlappingEdgePercent(const std::vector<int> &path1, const std::vector<int> &path2);
 
     static double euclideanHeuristic(const Graph &graph, int from, int to);
+
+    static void resetDijkstraState(std::vector<double> &dist, std::vector<int> &parent)
+    {
+        std::fill(dist.begin(), dist.end(), std::numeric_limits<double>::max());
+        std::fill(parent.begin(), parent.end(), -1);
+    }
 };
 
 #endif

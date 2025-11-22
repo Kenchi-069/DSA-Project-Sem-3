@@ -14,7 +14,9 @@ PHASE2_SOURCES = $(PHASE2_DIR)/Graph.cpp $(PHASE2_DIR)/Algorithms.cpp \
                  $(PHASE2_DIR)/JsonParser.cpp $(PHASE2_DIR)/QueryHandler.cpp \
                  $(PHASE2_DIR)/SampleDriver.cpp
 
-PHASE3_SOURCES = $(PHASE3_DIR)/SampleDriver.cpp
+PHASE3_SOURCES = $(PHASE3_DIR)/Graph.cpp $(PHASE3_DIR)/Algorithms.cpp \
+                 $(PHASE3_DIR)/JsonParser.cpp $(PHASE3_DIR)/QueryHandler.cpp \
+                 $(PHASE3_DIR)/SampleDriver.cpp
 
 PHASE1_OBJECTS = $(PHASE1_SOURCES:.cpp=.o)
 PHASE2_OBJECTS = $(PHASE2_SOURCES:.cpp=.o)

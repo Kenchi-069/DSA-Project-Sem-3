@@ -237,7 +237,7 @@ std::unordered_map<int, double> Algorithms::dijkstraAllDist(const Graph &graph, 
 std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k)
 {
     std::vector<int> poi_nodes = graph.getNodesPOI(poi);
-    std::vector<std::pair<double, int>> distances;
+    std::priority_queue<std::pair<double, int>> pq;
 
     for (int node_id : poi_nodes)
     {
@@ -245,15 +245,24 @@ std::vector<int> Algorithms::knn_euclidean(const Graph &graph, double query_lat,
         if (!n)
             continue;
         double dist = graph.EuDistance(query_lat, query_lon, n->lat, n->lon);
-        distances.push_back({dist, node_id});
+        if ((int)pq.size() < k)
+        {
+            pq.push({dist, node_id});
+        }
+        else if (dist < pq.top().first)
+        {
+            pq.pop();
+            pq.push({dist, node_id});
+        }
     }
-    std::sort(distances.begin(), distances.end());
 
     std::vector<int> result;
-    for (int i = 0; i < std::min(k, (int)distances.size()); i++)
+    while (!pq.empty())
     {
-        result.push_back(distances[i].second);
+        result.push_back(pq.top().second);
+        pq.pop();
     }
+    std::reverse(result.begin(), result.end());
     return result;
 }
 
