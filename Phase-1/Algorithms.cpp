@@ -52,8 +52,6 @@ double Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
         }
     }
 
-    double arrivalTime = startTime + totalTime;
-
     return totalTime;
 }
 
