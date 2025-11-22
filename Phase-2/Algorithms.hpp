@@ -51,6 +51,18 @@ struct FastEdge
     int id;
 };
 
+struct DState
+{
+    double search_cost;
+    double true_cost;
+    int node;
+
+    bool operator>(const DState &other) const
+    {
+        return search_cost > other.search_cost;
+    }
+};
+
 class AlgorithmsPhase2
 {
 public:
@@ -63,14 +75,11 @@ private:
     static PathResult dijkstraFast(int n, const std::vector<std::vector<FastEdge>> &adj, int source, int target, std::vector<double> &dist, std::vector<int> &parent, const std::vector<bool> &node_blocked, const std::vector<bool> &edge_blocked);
     static PathResult dijkstraSimple(const Graph &graph, int source, int target);
 
-    static PathResult dijkstraWithPenalties(const Graph &graph, int source, int target, const std::unordered_map<std::pair<int, int>, int, EdgeHash> &edge_usage, double penalty_multiplier, double max_cost);
-    static std::vector<int> selectViaCandidates(const Graph &graph, const std::vector<int> &shortest_path, int count);
-    static PathResult dijkstraWithCostLimit(const Graph &graph, int source, int target, double cost_limit, const std::unordered_map<std::pair<int, int>, int, EdgeHash> &edge_usage);
-    static PathResult dijkstraRandomized(const Graph &graph, int source, int target, double perturbation, std::mt19937 &rng, double max_cost);
-
     static bool isSimplePath(const std::vector<int> &path);
     static double OverlappingEdgePercent(const std::vector<int> &path1, const std::vector<int> &path2);
 
+    static PathResult dijkstraPenaltyDual(const Graph &graph, int source, int target, const std::unordered_map<std::pair<int, int>, double, EdgeHash> &penalty);
+   
     static double euclideanHeuristic(const Graph &graph, int from, int to);
 
     static void resetDijkstraState(std::vector<double> &dist, std::vector<int> &parent)
