@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
-std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
+double Algorithms::computeEdgeTravelTime(const Edge &e, double startTime)
 {
     // startTime: absolute seconds since t=0
     double remDistance = e.length;
@@ -57,7 +57,7 @@ std::pair<double, int> Algorithms::computeEdgeTravelTime(const Edge &e, double s
     if (arrivalSlot < 0)
         arrivalSlot += 96;
 
-    return {totalTime, arrivalSlot};
+    totalTime;
 }
 
 PathResult Algorithms::shortest_path_distance(const Graph &graph, int source, int target, const Constraints &constraints)
@@ -174,7 +174,7 @@ PathResult Algorithms::shortest_path_time(const Graph &graph, int source, int ta
             if (constraints.is_node_forbidden(v))
                 continue;
 
-            auto [edge_time, arrival_slot] = computeEdgeTravelTime(*e, curr_time);
+            double edge_time = computeEdgeTravelTime(*e, curr_time);
             double arrival_time = curr_time + edge_time;
 
             if (!best_time.count(v) || arrival_time < best_time[v])

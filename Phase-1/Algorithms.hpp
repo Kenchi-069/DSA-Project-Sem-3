@@ -39,7 +39,7 @@ public:
     static std::vector<int> knn_shortest_path(const Graph &graph, double query_lat, double query_lon, const std::string &poi, int k);
 
 private:
-    static std::pair<double, int> computeEdgeTravelTime(const Edge &e, double start_time);
+    static double computeEdgeTravelTime(const Edge &e, double start_time);
     static std::unordered_map<int, double> dijkstraAllDist(const Graph &graph, int source, bool use_time, const Constraints &constraints = Constraints());
 };
 
