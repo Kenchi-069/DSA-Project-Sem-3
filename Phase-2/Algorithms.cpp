@@ -306,24 +306,35 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
 {
     std::vector<PathResult> results;
 
+    std::unordered_set<std::vector<int>, VectorHash> distinct_paths;
+
     PathResult P0 = dijkstraSimple(graph, source, target);
     if (!P0.possible)
         return results;
 
     results.push_back(P0);
+    distinct_paths.insert(P0.path);
+
+    std::vector<std::vector<int>> penalty_paths;
+    penalty_paths.push_back(P0.path);
 
     double alpha = std::max(0.12, std::min(0.7, overlap_threshold / 120.0));
     double expo = 1.7;
     double neighbor_frac = 0.55;
 
-    for (int i = 2; i <= k; i++)
+    int max_attempts = k * 3;
+    int attempts = 0;
+
+    while (results.size() < k && attempts < max_attempts)
     {
+        attempts++;
+
         std::unordered_map<std::pair<int, int>, int, EdgeHash> edge_usage;
-        for (auto &Pj : results)
+        for (const auto &path : penalty_paths)
         {
-            for (int idx = 0; idx + 1 < (int)Pj.path.size(); idx++)
+            for (int idx = 0; idx + 1 < (int)path.size(); idx++)
             {
-                int u = Pj.path[idx], v = Pj.path[idx + 1];
+                int u = path[idx], v = path[idx + 1];
                 edge_usage[{std::min(u, v), std::max(u, v)}] += 1;
             }
         }
@@ -338,8 +349,8 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
         }
 
         std::unordered_set<int> path_nodes;
-        for (auto &Pj : results)
-            for (int n : Pj.path)
+        for (const auto &path : penalty_paths)
+            for (int n : path)
                 path_nodes.insert(n);
 
         for (int n : path_nodes)
@@ -357,10 +368,19 @@ std::vector<PathResult> AlgorithmsPhase2::k_shortest_paths_heuristic(
         }
 
         PathResult Pi = dijkstraPenaltyDual(graph, source, target, penalty);
+
         if (!Pi.possible)
             break;
-
-        results.push_back(Pi);
+        if (distinct_paths.find(Pi.path) == distinct_paths.end())
+        {
+            results.push_back(Pi);
+            distinct_paths.insert(Pi.path);
+            penalty_paths.push_back(Pi.path);
+        }
+        else
+        {
+            penalty_paths.push_back(Pi.path);
+        }
     }
 
     std::sort(results.begin(), results.end(),

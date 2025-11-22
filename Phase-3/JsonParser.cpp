@@ -32,10 +32,11 @@ Node JsonParserPhase3::parseNode(const json &j)
 Edge JsonParserPhase3::parseEdge(const json &j)
 {
     Edge e;
-    e.id = j["id"];
+    static int x = 0;
+    e.id = j.value("id", x++);  
     e.u = j["u"];
     e.v = j["v"];
-    e.length = j["length"];
+    e.length = j.value("length", 1);
     e.average_time = j["average_time"];
     e.oneway = j.value("oneway", false);
     e.is_deleted = false;

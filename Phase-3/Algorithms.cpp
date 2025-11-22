@@ -122,7 +122,7 @@ double calculateDriverObjective(
     double time = 0.0;
     int curr = depot;
     std::unordered_set<int> picked;
-    
+
     for (int oi : order_indices)
     {
         const auto &o = orders[oi];
@@ -133,22 +133,22 @@ double calculateDriverObjective(
             picked.insert(oi);
         }
     }
-    
+
     for (int node : stops)
     {
         time += dm.getTime(curr, node);
-        
+
         for (int oi : order_indices)
         {
             const auto &o = orders[oi];
-            
+
             if (o.pickup_node == node)
             {
                 if (time < o.ready_time)
                     time = o.ready_time;
                 picked.insert(oi);
             }
-            
+
             if (o.dropoff_node == node && picked.count(oi))
             {
                 objective += time * o.priority;
@@ -156,7 +156,7 @@ double calculateDriverObjective(
         }
         curr = node;
     }
-    
+
     return objective;
 }
 
@@ -183,7 +183,10 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
 {
     auto start_time = std::chrono::high_resolution_clock::now();
     const double TIME_LIMIT = 25.0;
-    
+
+    std::cout << "Starting scheduling with " << orders.size() << " orders and "
+              << num_drivers << " drivers" << std::endl;
+
     DistanceManager dm(graph);
     std::vector<std::vector<int>> driver_stops(num_drivers);
     std::vector<std::unordered_set<int>> driver_orders(num_drivers);
@@ -197,131 +200,152 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
         node_to_orders[orders[i].dropoff_node].push_back(i);
     }
 
-    // Phase 1: Initial construction (spend minimal time)
-    performSmartInsertion(dm, num_drivers, depot, orders, driver_stops, driver_orders, unassigned, start_time, 2.0);
+    // Phase 1: Initial construction with more time
+    std::cout << "Phase 1: Initial construction..." << std::endl;
+    performSmartInsertion(dm, num_drivers, depot, orders, driver_stops, driver_orders,
+                          unassigned, start_time, TIME_LIMIT * 0.15);
+
+    std::cout << "After smart insertion: " << unassigned.size() << " orders unassigned" << std::endl;
+
+    // Fallback: Force-assign any remaining unassigned orders
+    if (!unassigned.empty())
+    {
+        std::cout << "Force-assigning " << unassigned.size() << " remaining orders..." << std::endl;
+        while (!unassigned.empty())
+        {
+            int oi = *unassigned.begin();
+            const Order &ord = orders[oi];
+
+            // Find driver with minimum current objective increase
+            int best_driver = 0;
+            double best_increase = std::numeric_limits<double>::max();
+
+            for (int d = 0; d < num_drivers; ++d)
+            {
+                double current_obj = calculateDriverObjective(dm, depot, orders, driver_stops[d], driver_orders[d]);
+
+                auto test_stops = driver_stops[d];
+                auto test_orders = driver_orders[d];
+                test_orders.insert(oi);
+
+                if (ord.pickup_node != depot)
+                    test_stops.push_back(ord.pickup_node);
+                test_stops.push_back(ord.dropoff_node);
+
+                double new_obj = calculateDriverObjective(dm, depot, orders, test_stops, test_orders);
+                double increase = new_obj - current_obj;
+
+                if (increase < best_increase)
+                {
+                    best_increase = increase;
+                    best_driver = d;
+                }
+            }
+
+            // Assign to best driver
+            if (ord.pickup_node != depot)
+                driver_stops[best_driver].push_back(ord.pickup_node);
+            driver_stops[best_driver].push_back(ord.dropoff_node);
+            driver_orders[best_driver].insert(oi);
+            unassigned.erase(oi);
+        }
+    }
 
     auto best_driver_stops = driver_stops;
     auto best_driver_orders = driver_orders;
     double best_objective = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-    
+
     std::cout << "Initial objective: " << best_objective << std::endl;
 
+    // Verify all orders are assigned
+    int total_assigned = 0;
+    for (const auto &dorders : driver_orders)
+        total_assigned += dorders.size();
+    std::cout << "Total orders assigned: " << total_assigned << " / " << orders.size() << std::endl;
+
     // Phase 2: Continuous multi-level optimization
+    std::cout << "Phase 2: Optimization..." << std::endl;
     int iteration = 0;
     int stagnation_count = 0;
-    double last_improvement_time = 0.0;
-    
+
     while (true)
     {
         auto current_time = std::chrono::high_resolution_clock::now();
         double elapsed = std::chrono::duration<double>(current_time - start_time).count();
-        
-        if (elapsed > TIME_LIMIT)
+
+        if (elapsed > TIME_LIMIT * 0.95)
             break;
-        
+
         iteration++;
-        bool improved_this_round = false;
-        
-        // Multi-pass optimization: don't give up after first improvement
-        int num_passes = (stagnation_count < 3) ? 3 : 5; // More aggressive when stuck
-        
+
+        // Multi-pass optimization
+        int num_passes = (stagnation_count < 3) ? 2 : 3;
+
         for (int pass = 0; pass < num_passes && elapsed < TIME_LIMIT * 0.95; ++pass)
         {
             current_time = std::chrono::high_resolution_clock::now();
             elapsed = std::chrono::duration<double>(current_time - start_time).count();
-            
+
             if (elapsed > TIME_LIMIT * 0.95)
                 break;
-            
-            double before_pass = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-            
-            // Intra-route: relocate with best improvement (not first)
-            optimizeRoutesIntensiveBest(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-            
-            // Intra-route: 2-opt
-            twoOptIntraRoute(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-            
-            // Inter-route: relocate (find BEST move, not first)
-            interRouteRelocateBest(dm, num_drivers, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-            
-            // Inter-route: swap (find BEST swap)
-            interRouteSwapBest(dm, num_drivers, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-            
-            double after_pass = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-            
-            if (after_pass < before_pass - 1e-9)
+
+            // Intra-route optimizations
+            optimizeRoutesIntensiveBest(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT * 0.95);
+            twoOptIntraRoute(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT * 0.95);
+
+            // Inter-route optimizations
+            if (num_drivers > 1)
             {
-                improved_this_round = true;
+                interRouteRelocateBest(dm, num_drivers, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT * 0.95);
+                interRouteSwapBest(dm, num_drivers, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT * 0.95);
             }
         }
-        
+
         double current_objective = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-        
+
         if (current_objective < best_objective - 1e-9)
         {
             best_objective = current_objective;
             best_driver_stops = driver_stops;
             best_driver_orders = driver_orders;
             stagnation_count = 0;
-            last_improvement_time = elapsed;
-            std::cout << "Iteration " << iteration << ": New best = " << best_objective 
+            std::cout << "Iteration " << iteration << ": New best = " << best_objective
                       << " (time: " << elapsed << "s)" << std::endl;
         }
         else
         {
             stagnation_count++;
-            // Always revert to best solution when no improvement
             driver_stops = best_driver_stops;
             driver_orders = best_driver_orders;
         }
-        
-        // Double-check we're in sync
-        double check_obj = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-        if (std::abs(check_obj - best_objective) > 1e-3)
+
+        // Perturbation when stuck
+        if (stagnation_count >= 5 && elapsed < TIME_LIMIT * 0.85 && num_drivers > 1)
         {
-            std::cout << "WARNING: Sync issue detected! check=" << check_obj << " best=" << best_objective << std::endl;
-            driver_stops = best_driver_stops;
-            driver_orders = best_driver_orders;
-        }
-        
-        // Adaptive perturbation when stuck
-        if (stagnation_count >= 4 && elapsed < TIME_LIMIT * 0.85)
-        {
-            std::cout << "Strong perturbation at iteration " << iteration << " (stagnation: " << stagnation_count << ")" << std::endl;
-            
-            // Save the current best before perturbation
+            std::cout << "Perturbation at iteration " << iteration << std::endl;
+
             auto saved_stops = best_driver_stops;
             auto saved_orders = best_driver_orders;
-            
-            // Start perturbation from best solution
+
             driver_stops = best_driver_stops;
             driver_orders = best_driver_orders;
-            
-            int strength = std::min(stagnation_count - 3, 5);
+
+            int strength = std::min(stagnation_count - 4, 3);
             perturbSolutionAdaptive(dm, num_drivers, depot, orders, driver_stops, driver_orders, strength);
-            
-            // Check time before optimization
-            current_time = std::chrono::high_resolution_clock::now();
-            elapsed = std::chrono::duration<double>(current_time - start_time).count();
-            
-            if (elapsed < TIME_LIMIT * 0.85)
+
+            // Quick optimization after perturbation
+            for (int i = 0; i < 2; ++i)
             {
-                // Optimize after perturbation
-                for (int i = 0; i < 3; ++i)
-                {
-                    current_time = std::chrono::high_resolution_clock::now();
-                    elapsed = std::chrono::duration<double>(current_time - start_time).count();
-                    
-                    if (elapsed > TIME_LIMIT * 0.85)
-                        break;
-                    
-                    optimizeRoutesIntensiveBest(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-                    interRouteRelocateBest(dm, num_drivers, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-                }
+                current_time = std::chrono::high_resolution_clock::now();
+                elapsed = std::chrono::duration<double>(current_time - start_time).count();
+                if (elapsed > TIME_LIMIT * 0.85)
+                    break;
+
+                optimizeRoutesIntensiveBest(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT * 0.85);
             }
-            
+
             double perturbed_obj = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-            
+
             if (perturbed_obj < best_objective - 1e-9)
             {
                 best_objective = perturbed_obj;
@@ -332,64 +356,23 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
             }
             else
             {
-                // Revert to saved best
                 driver_stops = saved_stops;
                 driver_orders = saved_orders;
-                std::cout << "Perturbation failed, reverting (obj was " << perturbed_obj << ")" << std::endl;
-                stagnation_count++; // Increase to try stronger next time
+                stagnation_count++;
             }
         }
-        
-        // Safety check: always work with best solution
-        if (elapsed > TIME_LIMIT * 0.9)
-        {
-            driver_stops = best_driver_stops;
-            driver_orders = best_driver_orders;
-            break; // Exit main loop
-        }
     }
-    
+
+    // Use best solution
     driver_stops = best_driver_stops;
     driver_orders = best_driver_orders;
-    
-    // Final optimization pass on best solution
-    auto current_time = std::chrono::high_resolution_clock::now();
-    double elapsed = std::chrono::duration<double>(current_time - start_time).count();
-    if (elapsed < TIME_LIMIT * 0.98)
-    {
-        optimizeRoutesIntensiveBest(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-        twoOptIntraRoute(dm, depot, orders, driver_stops, driver_orders, start_time, TIME_LIMIT);
-        
-        double final_check = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-        if (final_check < best_objective)
-        {
-            best_objective = final_check;
-            best_driver_stops = driver_stops;
-            best_driver_orders = driver_orders;
-            std::cout << "Final polish improved to: " << best_objective << std::endl;
-        }
-        else
-        {
-            driver_stops = best_driver_stops;
-            driver_orders = best_driver_orders;
-        }
-    }
-    
+
     auto end_time = std::chrono::high_resolution_clock::now();
     double total_time = std::chrono::duration<double>(end_time - start_time).count();
     std::cout << "Final objective: " << best_objective << " (total time: " << total_time << "s)" << std::endl;
-    
-    // Verify we're using the best solution
-    double verify_obj = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-    std::cout << "Verification objective: " << verify_obj << std::endl;
-    if (std::abs(verify_obj - best_objective) > 1e-3)
-    {
-        std::cout << "WARNING: Objective mismatch! Using stored best solution." << std::endl;
-        driver_stops = best_driver_stops;
-        driver_orders = best_driver_orders;
-    }
 
     // Build result
+    std::cout << "Building final result..." << std::endl;
     ScheduleResult result;
     result.total_delivery_time = 0;
     std::unordered_map<int, double> order_delivery_times;
@@ -405,12 +388,13 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
         std::unordered_set<int> picked_orders;
         std::unordered_set<int> route_stops_set(driver_stops[d].begin(), driver_stops[d].end());
 
+        // Check for orders that can be picked up at depot
         if (node_to_orders.count(depot))
         {
             for (int o_idx : node_to_orders[depot])
             {
                 const auto &o = orders[o_idx];
-                if (o.pickup_node == depot && route_stops_set.count(o.dropoff_node))
+                if (o.pickup_node == depot && driver_orders[d].count(o_idx))
                 {
                     if (current_time < o.ready_time)
                         current_time = o.ready_time;
@@ -421,6 +405,7 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
             }
         }
 
+        // Process each stop
         for (int stop_node : driver_stops[d])
         {
             std::vector<int> segment = dm.getPath(current_node, stop_node);
@@ -434,9 +419,13 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
             {
                 for (int o_idx : node_to_orders[stop_node])
                 {
+                    if (!driver_orders[d].count(o_idx))
+                        continue;
+
                     const auto &o = orders[o_idx];
 
-                    if (o.pickup_node == stop_node && route_stops_set.count(o.dropoff_node))
+                    // Pickup at this node
+                    if (o.pickup_node == stop_node)
                     {
                         if (current_time < o.ready_time)
                             current_time = o.ready_time;
@@ -445,6 +434,7 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
                             dr.order_ids.push_back(o.order_id);
                     }
 
+                    // Dropoff at this node
                     if (o.dropoff_node == stop_node && picked_orders.count(o.order_id))
                     {
                         order_delivery_times[o.order_id] = current_time;
@@ -456,13 +446,27 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
 
         dr.completion_time = current_time;
         result.assignments.push_back(dr);
+
+        std::cout << "Driver " << d << ": " << dr.order_ids.size() << " orders, "
+                  << dr.route_path.size() << " nodes, completion time: "
+                  << dr.completion_time << std::endl;
     }
 
+    // Calculate total delivery time
     for (const auto &order : orders)
     {
         if (order_delivery_times.count(order.order_id))
+        {
             result.total_delivery_time += order_delivery_times[order.order_id] * order.priority;
+        }
+        else
+        {
+            std::cout << "WARNING: Order " << order.order_id << " was not delivered!" << std::endl;
+        }
     }
+
+    std::cout << "Total weighted delivery time: " << result.total_delivery_time << std::endl;
+    std::cout << "Orders delivered: " << order_delivery_times.size() << " / " << orders.size() << std::endl;
 
     return result;
 }
@@ -478,13 +482,17 @@ void AlgorithmsPhase3::performSmartInsertion(
     std::chrono::high_resolution_clock::time_point start_time,
     double time_limit)
 {
+    int inserted_count = 0;
     while (!unassigned.empty())
     {
         auto current_time = std::chrono::high_resolution_clock::now();
         double elapsed = std::chrono::duration<double>(current_time - start_time).count();
         if (elapsed > time_limit)
+        {
+            std::cout << "Smart insertion timeout after inserting " << inserted_count << " orders" << std::endl;
             break;
-        
+        }
+
         int best_order_idx = -1;
         int best_driver = -1;
         int best_pickup_pos = -1;
@@ -499,13 +507,13 @@ void AlgorithmsPhase3::performSmartInsertion(
             {
                 auto &stops = driver_stops[d];
                 int n = stops.size();
-                
+
                 bool pickup_at_depot = (ord.pickup_node == depot);
                 double current_obj = calculateDriverObjective(dm, depot, orders, stops, driver_orders[d]);
 
                 int pickup_start = pickup_at_depot ? 0 : 0;
                 int pickup_end = pickup_at_depot ? 1 : (n + 1);
-                
+
                 for (int p_pos = pickup_start; p_pos < pickup_end; ++p_pos)
                 {
                     for (int d_pos = p_pos + 1; d_pos <= n + 1; ++d_pos)
@@ -513,7 +521,7 @@ void AlgorithmsPhase3::performSmartInsertion(
                         std::vector<int> candidate = stops;
                         auto candidate_orders = driver_orders[d];
                         candidate_orders.insert(order_idx);
-                        
+
                         if (!pickup_at_depot)
                         {
                             candidate.insert(candidate.begin() + p_pos, ord.pickup_node);
@@ -523,10 +531,13 @@ void AlgorithmsPhase3::performSmartInsertion(
                         {
                             candidate.insert(candidate.begin() + (d_pos - 1), ord.dropoff_node);
                         }
-                        
+
+                        if (!isRouteValid(candidate, orders, candidate_orders, depot))
+                            continue;
+
                         double new_obj = calculateDriverObjective(dm, depot, orders, candidate, candidate_orders);
                         double marginal_cost = new_obj - current_obj;
-                        
+
                         if (marginal_cost < best_marginal_cost)
                         {
                             best_marginal_cost = marginal_cost;
@@ -544,7 +555,7 @@ void AlgorithmsPhase3::performSmartInsertion(
         {
             const Order &ord = orders[best_order_idx];
             auto &stops = driver_stops[best_driver];
-            
+
             if (ord.pickup_node != depot)
             {
                 stops.insert(stops.begin() + best_pickup_pos, ord.pickup_node);
@@ -554,12 +565,14 @@ void AlgorithmsPhase3::performSmartInsertion(
             {
                 stops.insert(stops.begin() + (best_dropoff_pos - 1), ord.dropoff_node);
             }
-            
+
             driver_orders[best_driver].insert(best_order_idx);
             unassigned.erase(best_order_idx);
+            inserted_count++;
         }
         else
         {
+            std::cout << "No valid insertion found for remaining " << unassigned.size() << " orders" << std::endl;
             break;
         }
     }
@@ -581,20 +594,21 @@ void AlgorithmsPhase3::optimizeRoutesIntensiveBest(
             continue;
 
         bool improved = true;
-        while (improved)
+        int local_iter = 0;
+        while (improved && local_iter < 100)
         {
             auto current_time = std::chrono::high_resolution_clock::now();
             double elapsed = std::chrono::duration<double>(current_time - start_time).count();
             if (elapsed > time_limit)
                 return;
-            
+
             improved = false;
+            local_iter++;
             double current_score = calculateDriverObjective(dm, depot, orders, stops, driver_orders[d]);
 
-            // Find BEST relocation, not first
             double best_score = current_score;
             std::vector<int> best_candidate;
-            
+
             for (size_t i = 0; i < stops.size(); ++i)
             {
                 for (size_t j = 0; j <= stops.size(); ++j)
@@ -620,7 +634,7 @@ void AlgorithmsPhase3::optimizeRoutesIntensiveBest(
                     }
                 }
             }
-            
+
             if (improved)
             {
                 stops = best_candidate;
@@ -645,14 +659,16 @@ void AlgorithmsPhase3::twoOptIntraRoute(
             continue;
 
         bool improved = true;
-        while (improved)
+        int local_iter = 0;
+        while (improved && local_iter < 50)
         {
             auto current_time = std::chrono::high_resolution_clock::now();
             double elapsed = std::chrono::duration<double>(current_time - start_time).count();
             if (elapsed > time_limit)
                 return;
-            
+
             improved = false;
+            local_iter++;
             double current_score = calculateDriverObjective(dm, depot, orders, stops, driver_orders[d]);
 
             double best_score = current_score;
@@ -664,7 +680,7 @@ void AlgorithmsPhase3::twoOptIntraRoute(
                 {
                     std::vector<int> candidate = stops;
                     std::reverse(candidate.begin() + i, candidate.begin() + j + 1);
-                    
+
                     if (!isRouteValid(candidate, orders, driver_orders[d], depot))
                         continue;
 
@@ -677,7 +693,7 @@ void AlgorithmsPhase3::twoOptIntraRoute(
                     }
                 }
             }
-            
+
             if (improved)
             {
                 stops = best_candidate;
@@ -698,62 +714,64 @@ void AlgorithmsPhase3::interRouteRelocateBest(
 {
     if (num_drivers < 2)
         return;
-    
+
     bool improved = true;
-    while (improved)
+    int iter = 0;
+    while (improved && iter < 20)
     {
         improved = false;
-        
+        iter++;
+
         double best_total = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
         int best_oi = -1, best_d1 = -1, best_d2 = -1;
         std::vector<int> best_stops1, best_stops2;
         std::unordered_set<int> best_orders1, best_orders2;
-        
+
         for (int d1 = 0; d1 < num_drivers; ++d1)
         {
             if (driver_orders[d1].empty())
                 continue;
-            
+
             std::vector<int> orders_list(driver_orders[d1].begin(), driver_orders[d1].end());
-            
+
             for (int oi : orders_list)
             {
                 auto current_time = std::chrono::high_resolution_clock::now();
                 double elapsed = std::chrono::duration<double>(current_time - start_time).count();
                 if (elapsed > time_limit)
                     return;
-                
+
                 const auto &ord = orders[oi];
                 double current_total = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-                
+
                 for (int d2 = 0; d2 < num_drivers; ++d2)
                 {
                     if (d1 == d2)
                         continue;
-                    
+
                     auto test_stops1 = driver_stops[d1];
                     auto test_orders1 = driver_orders[d1];
                     test_orders1.erase(oi);
-                    
+
                     test_stops1.erase(std::remove(test_stops1.begin(), test_stops1.end(), ord.pickup_node), test_stops1.end());
                     test_stops1.erase(std::remove(test_stops1.begin(), test_stops1.end(), ord.dropoff_node), test_stops1.end());
-                    
+
                     auto &stops2 = driver_stops[d2];
                     int n = stops2.size();
                     bool pickup_at_depot = (ord.pickup_node == depot);
-                    
+
                     int p_limit = pickup_at_depot ? 1 : (n + 1);
                     for (int p = 0; p < p_limit; ++p)
                     {
                         if (pickup_at_depot && p != 0)
                             continue;
-                        
+
                         for (int d_pos = p + 1; d_pos <= n + 1; ++d_pos)
                         {
                             auto candidate = stops2;
                             auto candidate_orders = driver_orders[d2];
                             candidate_orders.insert(oi);
-                            
+
                             if (!pickup_at_depot)
                             {
                                 candidate.insert(candidate.begin() + p, ord.pickup_node);
@@ -763,15 +781,18 @@ void AlgorithmsPhase3::interRouteRelocateBest(
                             {
                                 candidate.insert(candidate.begin() + (d_pos - 1), ord.dropoff_node);
                             }
-                            
+
+                            if (!isRouteValid(candidate, orders, candidate_orders, depot))
+                                continue;
+
                             double obj1 = calculateDriverObjective(dm, depot, orders, test_stops1, test_orders1);
                             double obj2 = calculateDriverObjective(dm, depot, orders, candidate, candidate_orders);
-                            
-                            double new_total = current_total - 
-                                              calculateDriverObjective(dm, depot, orders, driver_stops[d1], driver_orders[d1]) -
-                                              calculateDriverObjective(dm, depot, orders, driver_stops[d2], driver_orders[d2]) +
-                                              obj1 + obj2;
-                            
+
+                            double new_total = current_total -
+                                               calculateDriverObjective(dm, depot, orders, driver_stops[d1], driver_orders[d1]) -
+                                               calculateDriverObjective(dm, depot, orders, driver_stops[d2], driver_orders[d2]) +
+                                               obj1 + obj2;
+
                             if (new_total < best_total - 1e-9)
                             {
                                 best_total = new_total;
@@ -789,7 +810,7 @@ void AlgorithmsPhase3::interRouteRelocateBest(
                 }
             }
         }
-        
+
         if (improved)
         {
             driver_stops[best_d1] = best_stops1;
@@ -812,17 +833,19 @@ void AlgorithmsPhase3::interRouteSwapBest(
 {
     if (num_drivers < 2)
         return;
-    
+
     bool improved = true;
-    while (improved)
+    int iter = 0;
+    while (improved && iter < 10)
     {
         improved = false;
-        
+        iter++;
+
         double best_total = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
         int best_oi1 = -1, best_oi2 = -1, best_d1 = -1, best_d2 = -1;
         std::vector<int> best_stops1, best_stops2;
         std::unordered_set<int> best_orders1, best_orders2;
-        
+
         for (int d1 = 0; d1 < num_drivers; ++d1)
         {
             for (int d2 = d1 + 1; d2 < num_drivers; ++d2)
@@ -831,53 +854,53 @@ void AlgorithmsPhase3::interRouteSwapBest(
                 double elapsed = std::chrono::duration<double>(current_time - start_time).count();
                 if (elapsed > time_limit)
                     return;
-                
+
                 if (driver_orders[d1].empty() || driver_orders[d2].empty())
                     continue;
-                
+
                 for (int oi1 : driver_orders[d1])
                 {
                     for (int oi2 : driver_orders[d2])
                     {
                         double current_total = calculateTotalObjective(dm, depot, orders, driver_stops, driver_orders);
-                        
+
                         const auto &ord1 = orders[oi1];
                         const auto &ord2 = orders[oi2];
-                        
+
                         auto test_stops1 = driver_stops[d1];
                         auto test_stops2 = driver_stops[d2];
                         auto test_orders1 = driver_orders[d1];
                         auto test_orders2 = driver_orders[d2];
-                        
+
                         test_orders1.erase(oi1);
                         test_orders2.erase(oi2);
                         test_orders1.insert(oi2);
                         test_orders2.insert(oi1);
-                        
+
                         test_stops1.erase(std::remove(test_stops1.begin(), test_stops1.end(), ord1.pickup_node), test_stops1.end());
                         test_stops1.erase(std::remove(test_stops1.begin(), test_stops1.end(), ord1.dropoff_node), test_stops1.end());
                         test_stops2.erase(std::remove(test_stops2.begin(), test_stops2.end(), ord2.pickup_node), test_stops2.end());
                         test_stops2.erase(std::remove(test_stops2.begin(), test_stops2.end(), ord2.dropoff_node), test_stops2.end());
-                        
+
                         if (ord2.pickup_node != depot)
                             test_stops1.push_back(ord2.pickup_node);
                         test_stops1.push_back(ord2.dropoff_node);
-                        
+
                         if (ord1.pickup_node != depot)
                             test_stops2.push_back(ord1.pickup_node);
                         test_stops2.push_back(ord1.dropoff_node);
-                        
+
                         if (isRouteValid(test_stops1, orders, test_orders1, depot) &&
                             isRouteValid(test_stops2, orders, test_orders2, depot))
                         {
                             double obj1 = calculateDriverObjective(dm, depot, orders, test_stops1, test_orders1);
                             double obj2 = calculateDriverObjective(dm, depot, orders, test_stops2, test_orders2);
-                            
+
                             double new_total = current_total -
-                                              calculateDriverObjective(dm, depot, orders, driver_stops[d1], driver_orders[d1]) -
-                                              calculateDriverObjective(dm, depot, orders, driver_stops[d2], driver_orders[d2]) +
-                                              obj1 + obj2;
-                            
+                                               calculateDriverObjective(dm, depot, orders, driver_stops[d1], driver_orders[d1]) -
+                                               calculateDriverObjective(dm, depot, orders, driver_stops[d2], driver_orders[d2]) +
+                                               obj1 + obj2;
+
                             if (new_total < best_total - 1e-9)
                             {
                                 best_total = new_total;
@@ -896,7 +919,7 @@ void AlgorithmsPhase3::interRouteSwapBest(
                 }
             }
         }
-        
+
         if (improved)
         {
             driver_stops[best_d1] = best_stops1;
@@ -918,9 +941,9 @@ void AlgorithmsPhase3::perturbSolutionAdaptive(
 {
     std::random_device rd;
     std::mt19937 gen(rd());
-    
+
     int num_moves = std::min(2 + strength, (int)orders.size() / 3);
-    
+
     for (int m = 0; m < num_moves; ++m)
     {
         std::vector<int> non_empty;
@@ -929,44 +952,81 @@ void AlgorithmsPhase3::perturbSolutionAdaptive(
             if (!driver_orders[d].empty())
                 non_empty.push_back(d);
         }
-        
+
         if (non_empty.empty())
             continue;
-        
+
         int d1 = non_empty[gen() % non_empty.size()];
         std::vector<int> ords(driver_orders[d1].begin(), driver_orders[d1].end());
         int oi = ords[gen() % ords.size()];
-        
+
         int d2 = gen() % num_drivers;
         int tries = 0;
         while (d2 == d1 && tries++ < 10)
             d2 = gen() % num_drivers;
-        
+
         if (d2 == d1)
             continue;
-        
+
         const auto &ord = orders[oi];
-        
+
         driver_orders[d1].erase(oi);
         driver_stops[d1].erase(std::remove(driver_stops[d1].begin(), driver_stops[d1].end(), ord.pickup_node), driver_stops[d1].end());
         driver_stops[d1].erase(std::remove(driver_stops[d1].begin(), driver_stops[d1].end(), ord.dropoff_node), driver_stops[d1].end());
-        
+
         driver_orders[d2].insert(oi);
         if (ord.pickup_node != depot)
         {
             int pos = driver_stops[d2].empty() ? 0 : (gen() % (driver_stops[d2].size() + 1));
             driver_stops[d2].insert(driver_stops[d2].begin() + pos, ord.pickup_node);
         }
-        
+
         int dpos = driver_stops[d2].empty() ? 0 : (gen() % (driver_stops[d2].size() + 1));
         driver_stops[d2].insert(driver_stops[d2].begin() + dpos, ord.dropoff_node);
-        
+
         if (!isRouteValid(driver_stops[d2], orders, driver_orders[d2], depot))
         {
             driver_stops[d2].erase(std::remove(driver_stops[d2].begin(), driver_stops[d2].end(), ord.dropoff_node), driver_stops[d2].end());
             driver_stops[d2].push_back(ord.dropoff_node);
         }
     }
+}
+
+bool AlgorithmsPhase3::isRouteValid(
+    const std::vector<int> &stops,
+    const std::vector<Order> &orders,
+    const std::unordered_set<int> &order_indices,
+    int depot)
+{
+    std::unordered_set<int> picked;
+
+    for (int oi : order_indices)
+    {
+        const auto &o = orders[oi];
+        if (o.pickup_node == depot)
+        {
+            picked.insert(oi);
+        }
+    }
+
+    for (int node : stops)
+    {
+        for (int oi : order_indices)
+        {
+            const auto &o = orders[oi];
+            if (o.pickup_node == node)
+            {
+                picked.insert(oi);
+            }
+            if (o.dropoff_node == node)
+            {
+                if (!picked.count(oi))
+                    return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 // Legacy wrapper functions
@@ -1032,43 +1092,6 @@ void AlgorithmsPhase3::perturbSolution(
     perturbSolutionAdaptive(dm, num_drivers, depot, orders, driver_stops, driver_orders, 1);
 }
 
-bool AlgorithmsPhase3::isRouteValid(
-    const std::vector<int> &stops,
-    const std::vector<Order> &orders,
-    const std::unordered_set<int> &order_indices,
-    int depot)
-{
-    std::unordered_set<int> picked;
-    
-    for (int oi : order_indices)
-    {
-        const auto &o = orders[oi];
-        if (o.pickup_node == depot)
-        {
-            picked.insert(oi);
-        }
-    }
-    
-    for (int node : stops)
-    {
-        for (int oi : order_indices)
-        {
-            const auto &o = orders[oi];
-            if (o.pickup_node == node)
-            {
-                picked.insert(oi);
-            }
-            if (o.dropoff_node == node)
-            {
-                if (!picked.count(oi))
-                    return false;
-            }
-        }
-    }
-    
-    return true;
-}
-
 void AlgorithmsPhase3::optimizeRoutes(
     DistanceManager &dm,
     int depot,
@@ -1076,14 +1099,14 @@ void AlgorithmsPhase3::optimizeRoutes(
     std::vector<std::vector<int>> &driver_stops)
 {
     std::vector<std::unordered_set<int>> driver_orders(driver_stops.size());
-    
+
     std::unordered_map<int, std::vector<int>> node_to_orders;
     for (size_t i = 0; i < orders.size(); ++i)
     {
         node_to_orders[orders[i].pickup_node].push_back(i);
         node_to_orders[orders[i].dropoff_node].push_back(i);
     }
-    
+
     for (size_t d = 0; d < driver_stops.size(); ++d)
     {
         for (int node : driver_stops[d])
@@ -1095,7 +1118,7 @@ void AlgorithmsPhase3::optimizeRoutes(
                     const auto &o = orders[oi];
                     bool has_pickup = (o.pickup_node == depot);
                     bool has_dropoff = false;
-                    
+
                     for (int n : driver_stops[d])
                     {
                         if (n == o.pickup_node)
@@ -1103,7 +1126,7 @@ void AlgorithmsPhase3::optimizeRoutes(
                         if (n == o.dropoff_node)
                             has_dropoff = true;
                     }
-                    
+
                     if (has_pickup && has_dropoff)
                     {
                         driver_orders[d].insert(oi);
