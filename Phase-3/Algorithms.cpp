@@ -133,6 +133,9 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
     ScheduleResult result;
     result.total_delivery_time = 0;
 
+    // Calculate delivery time for each order across all drivers
+    std::unordered_map<int, double> order_delivery_times;
+
     for (int d = 0; d < num_drivers; ++d)
     {
         DriverRoute dr;
@@ -141,8 +144,35 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
         dr.route_path.push_back(depot);
         double current_time = 0.0;
 
-        std::unordered_set<int> assigned_order_ids;
+        std::unordered_set<int> picked_orders;
         std::unordered_set<int> route_stops_set(driver_stops[d].begin(), driver_stops[d].end());
+
+        // Handle pickups at the depot (at time 0)
+        if (node_to_orders.count(depot))
+        {
+            for (int o_idx : node_to_orders[depot])
+            {
+                const auto &o = orders[o_idx];
+                if (o.pickup_node == depot)
+                {
+                    // Check if dropoff is in this route
+                    if (route_stops_set.count(o.dropoff_node))
+                    {
+                        // Wait if we arrived before ready time
+                        if (current_time < o.ready_time)
+                        {
+                            current_time = o.ready_time;
+                        }
+                        picked_orders.insert(o.order_id);
+                        // Only add to order_ids once per order
+                        if (std::find(dr.order_ids.begin(), dr.order_ids.end(), o.order_id) == dr.order_ids.end())
+                        {
+                            dr.order_ids.push_back(o.order_id);
+                        }
+                    }
+                }
+            }
+        }
 
         for (int stop_node : driver_stops[d])
         {
@@ -155,27 +185,41 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
             double travel = dm.getTime(current_node, stop_node);
             current_time += travel;
 
+            // Handle pickups and dropoffs at this node
             if (node_to_orders.count(stop_node))
             {
                 for (int o_idx : node_to_orders[stop_node])
                 {
                     const auto &o = orders[o_idx];
 
+                    // Handle pickup
                     if (o.pickup_node == stop_node)
                     {
+                        // Check if dropoff is also in this route
                         if (route_stops_set.count(o.dropoff_node))
                         {
+                            // Wait if we arrived before ready time
                             if (current_time < o.ready_time)
+                            {
                                 current_time = o.ready_time;
-                            assigned_order_ids.insert(o.order_id);
+                            }
+                            picked_orders.insert(o.order_id);
+                            // Only add to order_ids once per order
+                            if (std::find(dr.order_ids.begin(), dr.order_ids.end(), o.order_id) == dr.order_ids.end())
+                            {
+                                dr.order_ids.push_back(o.order_id);
+                            }
                         }
                     }
 
+                    // Handle dropoff
                     if (o.dropoff_node == stop_node)
                     {
-                        if (assigned_order_ids.count(o.order_id))
+                        // Only count if we picked it up in this route
+                        if (picked_orders.count(o.order_id))
                         {
-                            result.total_delivery_time += current_time * o.priority;
+                            // Record the delivery time for this order
+                            order_delivery_times[o.order_id] = current_time;
                         }
                     }
                 }
@@ -184,9 +228,17 @@ ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
         }
 
         dr.completion_time = current_time;
-        for (int oid : assigned_order_ids)
-            dr.order_ids.push_back(oid);
         result.assignments.push_back(dr);
+    }
+
+    // Calculate total weighted delivery time
+    // This is the sum of (delivery_time * priority) for each order
+    for (const auto &order : orders)
+    {
+        if (order_delivery_times.count(order.order_id))
+        {
+            result.total_delivery_time += order_delivery_times[order.order_id] * order.priority;
+        }
     }
 
     return result;
@@ -350,12 +402,7 @@ void AlgorithmsPhase3::optimizeRoutes(
                                     picked.insert(o.order_id);
                                 if (o.dropoff_node == n)
                                 {
-                                    bool p_in_route = false;
-                                    for (int x : candidate)
-                                        if (x == o.pickup_node)
-                                            p_in_route = true;
-
-                                    if (p_in_route && !picked.count(o.order_id))
+                                    if (!picked.count(o.order_id))
                                     {
                                         valid = false;
                                         break;
@@ -394,6 +441,7 @@ double AlgorithmsPhase3::evaluateRouteScore(
     double total_weighted = 0;
     double time = 0;
     int curr = depot;
+    std::unordered_set<int> picked_orders;
 
     for (int node : stops)
     {
@@ -405,8 +453,9 @@ double AlgorithmsPhase3::evaluateRouteScore(
             {
                 if (time < o.ready_time)
                     time = o.ready_time;
+                picked_orders.insert(o.order_id);
             }
-            if (o.dropoff_node == node)
+            if (o.dropoff_node == node && picked_orders.count(o.order_id))
             {
                 total_weighted += time * o.priority;
             }
