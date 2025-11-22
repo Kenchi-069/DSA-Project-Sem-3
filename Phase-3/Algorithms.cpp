@@ -108,6 +108,61 @@ std::vector<int> DistanceManager::getPath(int from, int to)
     return path;
 }
 
+// Helper function to calculate total objective for a given assignment
+double calculateTotalObjective(
+    DistanceManager &dm,
+    int depot,
+    const std::vector<Order> &orders,
+    const std::vector<std::vector<int>> &driver_stops,
+    const std::vector<std::unordered_set<int>> &driver_order_sets)
+{
+    double total = 0.0;
+    
+    for (size_t d = 0; d < driver_stops.size(); ++d)
+    {
+        double time = 0.0;
+        int curr = depot;
+        std::unordered_set<int> picked;
+        
+        // Check for depot pickups
+        for (const auto &order : orders)
+        {
+            if (order.pickup_node == depot && driver_order_sets[d].count(order.order_id))
+            {
+                if (time < order.ready_time)
+                    time = order.ready_time;
+                picked.insert(order.order_id);
+            }
+        }
+        
+        for (int node : driver_stops[d])
+        {
+            time += dm.getTime(curr, node);
+            
+            for (const auto &order : orders)
+            {
+                if (!driver_order_sets[d].count(order.order_id))
+                    continue;
+                    
+                if (order.pickup_node == node)
+                {
+                    if (time < order.ready_time)
+                        time = order.ready_time;
+                    picked.insert(order.order_id);
+                }
+                
+                if (order.dropoff_node == node && picked.count(order.order_id))
+                {
+                    total += time * order.priority;
+                }
+            }
+            curr = node;
+        }
+    }
+    
+    return total;
+}
+
 ScheduleResult AlgorithmsPhase3::solveDeliveryScheduling(
     const Graph &graph,
     int num_drivers,
@@ -237,96 +292,124 @@ void AlgorithmsPhase3::performRegretInsertion(
     std::vector<std::vector<int>> &driver_stops,
     std::unordered_set<int> &unassigned)
 {
+    // Track which orders are assigned to which driver
+    std::vector<std::unordered_set<int>> driver_orders(num_drivers);
+    
     while (!unassigned.empty())
     {
         int best_order_idx = -1;
-        double max_regret = -1.0;
+        int best_driver = -1;
+        int best_pickup_pos = -1;
+        int best_dropoff_pos = -1;
+        double best_objective = 1e9;
 
-        struct Move
-        {
-            int driver;
-            int p_idx;
-            int d_idx;
-            double cost;
-        };
-        Move global_best_move = {-1, -1, -1, 1e9};
-
+        // For each unassigned order, find the best insertion
         for (int order_idx : unassigned)
         {
             const Order &ord = orders[order_idx];
-            double best_cost = 1e9, second_best_cost = 1e9;
-            Move local_best_move = {-1, -1, -1, 1e9};
 
+            // Try inserting into each driver
             for (int d = 0; d < num_drivers; ++d)
             {
-                const auto &stops = driver_stops[d];
+                auto &stops = driver_stops[d];
                 int n = stops.size();
+                
+                bool pickup_at_depot = (ord.pickup_node == depot);
 
-                for (int i = 0; i <= n; ++i)
+                // Try all possible insertion positions
+                int pickup_start = pickup_at_depot ? 0 : 0;
+                int pickup_end = pickup_at_depot ? 1 : (n + 1);
+                
+                for (int p_pos = pickup_start; p_pos < pickup_end; ++p_pos)
                 {
-                    int prev_p = (i == 0) ? depot : stops[i - 1];
-                    int next_p = (i == n) ? -1 : stops[i];
-
-                    double cost_p = (next_p == -1)
-                                        ? dm.getTime(prev_p, ord.pickup_node)
-                                        : calculateInsertionCost(dm, prev_p, next_p, ord.pickup_node);
-
-                    for (int j = i + 1; j <= n + 1; ++j)
+                    for (int d_pos = p_pos + 1; d_pos <= n + 1; ++d_pos)
                     {
-                        int prev_d, next_d;
-
-                        if (j == i + 1)
+                        // Create candidate route
+                        std::vector<int> candidate = stops;
+                        auto candidate_orders = driver_orders[d];
+                        candidate_orders.insert(order_idx);
+                        
+                        if (!pickup_at_depot)
                         {
-                            prev_d = ord.pickup_node;
-                            next_d = (i == n) ? -1 : stops[i];
+                            candidate.insert(candidate.begin() + p_pos, ord.pickup_node);
+                            candidate.insert(candidate.begin() + d_pos, ord.dropoff_node);
                         }
                         else
                         {
-                            prev_d = stops[j - 2];
-                            next_d = (j - 1 == n) ? -1 : stops[j - 1];
+                            candidate.insert(candidate.begin() + (d_pos - 1), ord.dropoff_node);
                         }
-
-                        double cost_d = (next_d == -1)
-                                            ? dm.getTime(prev_d, ord.dropoff_node)
-                                            : calculateInsertionCost(dm, prev_d, next_d, ord.dropoff_node);
-
-                        double total = cost_p + cost_d;
-
-                        if (total < best_cost)
+                        
+                        // Calculate objective with this insertion
+                        double time = 0.0;
+                        int curr = depot;
+                        std::unordered_set<int> picked;
+                        double objective = 0.0;
+                        
+                        // Handle depot pickups
+                        for (int oi : candidate_orders)
                         {
-                            second_best_cost = best_cost;
-                            best_cost = total;
-                            local_best_move = {d, i, j, total};
+                            const auto &o = orders[oi];
+                            if (o.pickup_node == depot)
+                            {
+                                if (time < o.ready_time)
+                                    time = o.ready_time;
+                                picked.insert(oi);
+                            }
                         }
-                        else if (total < second_best_cost)
+                        
+                        for (int node : candidate)
                         {
-                            second_best_cost = total;
+                            time += dm.getTime(curr, node);
+                            
+                            for (int oi : candidate_orders)
+                            {
+                                const auto &o = orders[oi];
+                                
+                                if (o.pickup_node == node)
+                                {
+                                    if (time < o.ready_time)
+                                        time = o.ready_time;
+                                    picked.insert(oi);
+                                }
+                                
+                                if (o.dropoff_node == node && picked.count(oi))
+                                {
+                                    objective += time * o.priority;
+                                }
+                            }
+                            curr = node;
+                        }
+                        
+                        if (objective < best_objective)
+                        {
+                            best_objective = objective;
+                            best_order_idx = order_idx;
+                            best_driver = d;
+                            best_pickup_pos = p_pos;
+                            best_dropoff_pos = d_pos;
                         }
                     }
                 }
             }
-
-            double regret = second_best_cost - best_cost;
-            if (second_best_cost >= 1e9)
-                regret = best_cost * 10.0;
-            regret *= ord.priority;
-
-            if (regret > max_regret)
-            {
-                max_regret = regret;
-                best_order_idx = order_idx;
-                global_best_move = local_best_move;
-            }
         }
 
+        // Insert the best order
         if (best_order_idx != -1)
         {
             const Order &ord = orders[best_order_idx];
-            auto &r = driver_stops[global_best_move.driver];
-
-            r.insert(r.begin() + global_best_move.p_idx, ord.pickup_node);
-            r.insert(r.begin() + global_best_move.d_idx, ord.dropoff_node);
-
+            auto &stops = driver_stops[best_driver];
+            
+            if (ord.pickup_node != depot)
+            {
+                stops.insert(stops.begin() + best_pickup_pos, ord.pickup_node);
+                stops.insert(stops.begin() + best_dropoff_pos, ord.dropoff_node);
+            }
+            else
+            {
+                stops.insert(stops.begin() + (best_dropoff_pos - 1), ord.dropoff_node);
+            }
+            
+            driver_orders[best_driver].insert(best_order_idx);
             unassigned.erase(best_order_idx);
         }
         else
